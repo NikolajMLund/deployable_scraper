@@ -1,22 +1,22 @@
-from test_tools import test_db as db
+from helper_class import tdb as db
 import json
 import sqlite3 
 
 def test_insert_availabilityLog():
     try:
         # creating test environment.
-        test_db=db(name='test')
-        test_db.create_db()
-        test_db.insert_location_test_data()
+        tdb=db(name='test')
+        tdb.create_db()
+        tdb.insert_location_test_data()
 
         with open('tests/availability_test.json', 'r', encoding='utf-8') as f:
             availability = json.load(f)
 
         for k in availability.keys():
             v = availability[k]
-            test_db.insert_row_in_availabilityLog_table(loc_avail_query=v)
+            tdb.insert_row_in_availabilityLog_table(loc_avail_query=v)
 
-        conn = sqlite3.connect(f'{test_db.name}.db')
+        conn = sqlite3.connect(f'{tdb.name}.db')
         cursor = conn.cursor()    
         cursor.execute(f"SELECT COUNT(*) FROM availabilityLog")
         count_availabilityLog = cursor.fetchone()[0]
@@ -29,7 +29,7 @@ def test_insert_availabilityLog():
     finally:
         conn.close()
         # clean up: 
-        test_db.clean_up_db()
+        tdb.clean_up_db()
 
 if __name__ == '__main__':
     test_insert_availabilityLog()

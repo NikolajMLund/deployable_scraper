@@ -1,17 +1,17 @@
-from test_tools import test_db as db
+from helper_class import tdb as db
 
 def test_create_db():
-    test_db = db(name='test')
+    tdb = db(name='test')
 
-    if test_db.check_if_db_exists():
-        #print(f'To run this test first delete the {test_db.name}.db in the root directory')
-        raise FileExistsError(f'To run this test first delete the {test_db.name}.db in the root directory')
+    if tdb.check_if_db_exists():
+        #print(f'To run this test first delete the {tdb.name}.db in the root directory')
+        raise FileExistsError(f'To run this test first delete the {tdb.name}.db in the root directory')
 
-    test_db.create_db()
+    tdb.create_db()
     try:
-        assert test_db.check_if_db_exists(), f'{test_db.name}.db was not created'
+        assert tdb.check_if_db_exists(), f'{tdb.name}.db was not created'
     finally:
-        test_db.clean_up_db()
+        tdb.clean_up_db()
 
 if __name__ == '__main__':
     test_create_db()

@@ -1,21 +1,21 @@
 
-from test_tools import test_db as db
+from helper_class import tdb as db
 import sqlite3
 
 def test_select_locationId_by_speed():
     try:
-        test_db=db(name='test')
+        tdb=db(name='test')
 
-        test_db.create_db()
+        tdb.create_db()
 
-        test_db.insert_location_test_data()
-        test_db.insert_connectorGroup_test_data()
+        tdb.insert_location_test_data()
+        tdb.insert_connectorGroup_test_data()
 
         # ['Standard', 'Fast', 'Rapid', 'Unknown']
-        slocids=test_db.select_locationIds_by_speed('Standard')
-        flocids=test_db.select_locationIds_by_speed('Fast')
-        rlocids=test_db.select_locationIds_by_speed('Rapid')
-        ulocids=test_db.select_locationIds_by_speed('Unknown')
+        slocids=tdb.select_locationIds_by_speed('Standard')
+        flocids=tdb.select_locationIds_by_speed('Fast')
+        rlocids=tdb.select_locationIds_by_speed('Rapid')
+        ulocids=tdb.select_locationIds_by_speed('Unknown')
 
         scount=len(slocids)
         fcount=len(flocids)
@@ -24,7 +24,7 @@ def test_select_locationId_by_speed():
 
         tcount=scount + fcount + rcount + ucount 
 
-        conn = sqlite3.connect(f'{test_db.name}.db')
+        conn = sqlite3.connect(f'{tdb.name}.db')
         cursor = conn.cursor()    
         cursor.execute(f"SELECT COUNT(*) FROM (SELECT DISTINCT locationId, speed FROM latest_connector_groups);")
         ncount = cursor.fetchone()[0]
@@ -35,7 +35,7 @@ def test_select_locationId_by_speed():
 
     # clean up: 
     finally:
-        test_db.clean_up_db()
+        tdb.clean_up_db()
 
 if __name__ == '__main__':
     test_select_locationId_by_speed()
