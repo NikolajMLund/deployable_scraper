@@ -4,11 +4,13 @@ from scrapers.with_requests.scrape_locations_with_api import scraper as loc_scra
 from db_tools import db
 from logging_config import setup_logging
 
-import schedule
+from apscheduler.schedulers.blocking import BlockingScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+
 import os
 import time
 import logging
-from datetime import datetime 
+from datetime import datetime, timedelta
 
 # Get logger for this module
 logger = logging.getLogger(__name__)
@@ -99,9 +101,7 @@ def run_locations():
     logger.info(f'For {nmissing_ConnectorCounts} locations "connectorCounts" did not exist. Used "plugTypes" instead.')
     logger.info("Locations scrape completed")
 
-
-
-if __name__ == "__main__":
+def run_scraper_schedule(scheduler_class=BlockingScheduler):
     # Initialize logging FIRST, before any other code runs
     setup_logging()
     
@@ -131,19 +131,26 @@ if __name__ == "__main__":
         logger.info(f"  - sleep between requests: every {sleep_in_seconds} seconds")
 
         # Set the schedule - availability: 
-        schedule.every(minute_interval).minutes.do(
-            run_avail, 
-            speed=speed, 
-            max_workers=max_workers, 
-            sleep_in_seconds=sleep_in_seconds,
+        scheduler = scheduler_class()
+        scheduler.add_job(
+            func=run_avail,
+            args = [speed, max_workers, sleep_in_seconds], #args to funcs
+            trigger = IntervalTrigger(minutes=minute_interval),  # Fixed intervals!
+            id = 'Availability_scraper',
+            name = f'{speed} Availability Scraper',
+            max_instances = 1,  # Prevents overlaps
+            coalesce=True,
+            next_run_time=datetime.now() + timedelta(seconds=1) # Runs at once when initialized
         )
 
         logger.info("Schedule initialized. Starting scheduled execution loop")
 
         # Keep running scheduled tasks
-        while True:
-            schedule.run_pending()
-            time.sleep(60)  # Check every x seconds
+        try:
+            scheduler.start() # blocks if BlockingScheduler is used
+            return scheduler # if BackgroundScheduler is used returns scheduler (used for testing)
+        except (KeyboardInterrupt, SystemExit):
+            logger.info("Scrape schedule was shutdown")
     
     elif (run_mode == 'scheduled') and (speed == 'Locations'):
         logger.info('Initializing run schedule')
@@ -151,12 +158,26 @@ if __name__ == "__main__":
         logger.info(f"Schedule configuration:")
         logger.info(f"  - Scraper type: Locations")
         logger.info(f"  - Scrape interval: Every {location_day_interval} days")
-        
-        schedule.every(location_day_interval).days.do(run_locations)
-        
-        while True:
-            schedule.run_pending()
-            time.sleep(60)  # Check every x seconds
+
+        # Set the schedule - availability: 
+        scheduler = scheduler_class()
+        scheduler.add_job(
+            func=run_locations,
+            trigger = IntervalTrigger(days=location_day_interval),  # Fixed intervals!
+            id = 'locations_scraper',
+            name = 'locations Scraper',
+            max_instances = 1,  # Prevents overlaps
+            coalesce=True,
+        )
+
+        logger.info("Schedule initialized. Starting scheduled execution loop")
+
+        # Keep running scheduled tasks
+        try:
+            scheduler.start() # blocks if BlockingScheduler is used
+            return scheduler # if BackgroundScheduler is used returns scheduler (used for testing)
+        except (KeyboardInterrupt, SystemExit):
+            logger.info("Scrape schedule was shutdown")
 
     elif (run_mode == 'once') and (speed == 'Locations'):
         logger.info('Ran locations scraper.')
@@ -177,3 +198,7 @@ if __name__ == "__main__":
         )
     else:
         logger.warning(f"Scraper configs could not be resolved.")
+
+
+if __name__ == "__main__":
+    run_scraper_schedule(scheduler_class=BlockingScheduler)

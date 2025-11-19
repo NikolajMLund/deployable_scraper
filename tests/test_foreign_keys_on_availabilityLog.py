@@ -1,10 +1,10 @@
-from test_tools import test_db as db
+from helper_class import tdb as db
 
 def test_foreign_keys_on_availabilityLog():
     try:
-        test_db=db(name='test')
+        tdb=db(name='test')
 
-        test_db.create_db()
+        tdb.create_db()
 
         ## Inserting locations into db.
         loc_insert = {
@@ -19,7 +19,7 @@ def test_foreign_keys_on_availabilityLog():
             'ts_seconds':  100,
             'ts_nanoseconds': 200,
         }
-        test_db.insert_row('locations', loc_insert)
+        tdb.insert_row('locations', loc_insert)
 
         ## Inserting evseids into db.
         evse_insert = {
@@ -27,7 +27,7 @@ def test_foreign_keys_on_availabilityLog():
             'revision': 1,
             'evseId': '1',
         }
-        test_db.insert_row('evseids', evse_insert)
+        tdb.insert_row('evseids', evse_insert)
 
         ## insert create_availabilityLog_table with right parameters
         availability_log_insert = {
@@ -37,7 +37,7 @@ def test_foreign_keys_on_availabilityLog():
             'status': 'Available',
             'timestamp': 100
         }
-        success, error=test_db.insert_row('availabilityLog', availability_log_insert)
+        success, error=tdb.insert_row('availabilityLog', availability_log_insert)
 
         assert success, 'Could not insert correct data into AvailabilityLog'
 
@@ -49,12 +49,12 @@ def test_foreign_keys_on_availabilityLog():
             # missing connectorId and status
             'timestamp': 100
         }
-        success, error=test_db.insert_row('availabilityLog', wrong_availability_log_insert)
+        success, error=tdb.insert_row('availabilityLog', wrong_availability_log_insert)
 
         assert error.sqlite_errorcode == 787, 'sqlite does not return 787 error when inserting non existing evseId'
     
     finally:
-        test_db.clean_up_db()
+        tdb.clean_up_db()
 
 if __name__ == '__main__':
     test_foreign_keys_on_availabilityLog()

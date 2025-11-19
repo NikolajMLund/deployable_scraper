@@ -1,10 +1,10 @@
-from test_tools import test_db as db
+from helper_class import tdb as db
 
 def test_foreign_keys_on_availabilityAggregated():
     # Setup test db. 
     try:
-        test_db=db(name='test')
-        test_db.create_db()
+        tdb=db(name='test')
+        tdb.create_db()
 
         # Populating test db. 
         ## Inserting locations into db.
@@ -20,7 +20,7 @@ def test_foreign_keys_on_availabilityAggregated():
             'ts_seconds':  100,
             'ts_nanoseconds': 200,
         }
-        test_db.insert_row('locations', loc_insert)
+        tdb.insert_row('locations', loc_insert)
 
 
         ## Inserting connectorCounts into db.
@@ -29,7 +29,7 @@ def test_foreign_keys_on_availabilityAggregated():
             'revision': 1, 
             'connectorGroup': 1, 
         }
-        test_db.insert_row('connectorGroups', connector_count_insert)
+        tdb.insert_row('connectorGroups', connector_count_insert)
 
 
         ## insert create_availabilityAggregated_table with right parameters
@@ -41,7 +41,7 @@ def test_foreign_keys_on_availabilityAggregated():
             'totalCount': 2,
             'createdAt': 100
         }
-        success, error=test_db.insert_row('availabilityAggregated', availability_agg_insert)
+        success, error=tdb.insert_row('availabilityAggregated', availability_agg_insert)
 
         assert success, 'Could not insert correct data into AvailabilityLog'
 
@@ -56,12 +56,12 @@ def test_foreign_keys_on_availabilityAggregated():
         }
 
 
-        success, error=test_db.insert_row('availabilityAggregated', wrong_availability_agg_insert)
+        success, error=tdb.insert_row('availabilityAggregated', wrong_availability_agg_insert)
 
         assert error.sqlite_errorcode == 787, 'sqlite does not return 787 error when inserting non existing evseId'
     
     finally:
-        test_db.clean_up_db()
+        tdb.clean_up_db()
 
 if __name__ == '__main__':
     test_foreign_keys_on_availabilityAggregated()

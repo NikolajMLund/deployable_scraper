@@ -9,6 +9,7 @@ dependencies:
   - schedule
   - pip:
       - pre-commit
+      - APScheduler
       - git+https://github.com/NikolajMLund/scraping_charger_data.git
       - -e .
   

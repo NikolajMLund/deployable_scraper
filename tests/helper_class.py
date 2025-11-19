@@ -1,9 +1,10 @@
 from db_tools import db
 import json
 import os
-class test_db(db): 
+
+class tdb(db): 
     """
-    test_db inherits from db. But adds some functions to shorten the test scripts.
+    tdb inherits from db. But adds some functions to shorten the test scripts.
     """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -49,5 +50,3 @@ class test_db(db):
 
         if os.path.exists(db_file):
             os.remove(db_file)
-            
-

@@ -1,14 +1,14 @@
-from test_tools import test_db as db
+from helper_class import tdb as db
 import sqlite3 
 
 def test_insert_connectorGroups():
     try:
-        test_db=db(name='test')
-        test_db.create_db()
-        test_db.insert_location_test_data()
-        test_db.insert_connectorGroup_test_data()
+        tdb=db(name='test')
+        tdb.create_db()
+        tdb.insert_location_test_data()
+        tdb.insert_connectorGroup_test_data()
 
-        conn = sqlite3.connect(f'{test_db.name}.db')
+        conn = sqlite3.connect(f'{tdb.name}.db')
         cursor = conn.cursor()    
         cursor.execute(f"SELECT COUNT(*) FROM ConnectorGroups")
         count = cursor.fetchone()[0]
@@ -17,7 +17,7 @@ def test_insert_connectorGroups():
     # clean up: 
     finally:
         conn.close()
-        test_db.clean_up_db()
+        tdb.clean_up_db()
 
 if __name__ == '__main__':
     test_insert_connectorGroups()
