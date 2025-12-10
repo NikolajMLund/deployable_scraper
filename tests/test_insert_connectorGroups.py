@@ -1,4 +1,4 @@
-from helper_class import tdb as db
+from tests.functionality_testing.helper_class import tdb as db
 import sqlite3 
 
 def test_insert_connectorGroups():

@@ -10,7 +10,7 @@ class tdb(db):
         super().__init__(*args, **kwargs)
 
     def insert_location_test_data(self):
-        with open('tests/location_test.json', 'r', encoding='utf-8') as f:
+        with open('tests/data/location_test.json', 'r', encoding='utf-8') as f:
             locations = json.load(f)
 
         for k in locations['locations'].keys():
@@ -23,7 +23,7 @@ class tdb(db):
         """
         
         """
-        with open('tests/location_test.json', 'r', encoding='utf-8') as f:
+        with open('tests/data/location_test.json', 'r', encoding='utf-8') as f:
             locations = json.load(f)
 
 

@@ -1,4 +1,4 @@
-from helper_class import tdb as db
+from tests.functionality_testing.helper_class import tdb as db
 
 def test_foreign_keys_on_availabilityAggregated():
     # Setup test db. 

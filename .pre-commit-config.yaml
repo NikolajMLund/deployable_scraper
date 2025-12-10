@@ -8,7 +8,7 @@ repos:
         types: [python]
         pass_filenames: false
         always_run: true
-        args: ["-v", "--tb=long", "tests/"]
+        args: ["-v", "--tb=long", "tests/functionality_testing"]
       
       # - id: pytest-coverage
       #   name: pytest with coverage

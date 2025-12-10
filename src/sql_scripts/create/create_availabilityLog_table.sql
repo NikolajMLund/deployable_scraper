@@ -1,5 +1,5 @@
 -- Foreign Key onto evseIds table
-CREATE TABLE availabilityLog (
+CREATE TABLE IF NOT EXISTS availabilityLog (
     locationId TEXT, 
     revision INTEGER,
     evseId TEXT, 

@@ -2,6 +2,7 @@ import os
 import sqlite3
 import logging
 from importlib import resources
+from datetime import datetime
 
 # Create module-level logger
 logger = logging.getLogger(__name__)
@@ -16,10 +17,9 @@ class db:
     
     def create_db(self): 
         if self.check_if_db_exists():
-            logger.debug(f"Database {self.name} already exists, skipping creation")
-            return 
-
-        logger.debug(f"Creating database: {self.name}")
+            logger.debug(f"Database {self.name} already exist - adding tables if they currently do not exist:")
+        else: 
+            logger.debug(f"Database {self.name} Initialized - adding tables:")
         
         # connect to db 
         conn = sqlite3.connect(f'{self.name}.db')
@@ -33,12 +33,31 @@ class db:
             'create_availabilityLog_table.sql',
             'create_availabilityAggregated_table.sql',
             'create_latest_connectorGroups_newest_revision_view.sql',
+            'create_pricesLog_table.sql',
         ]
+
+        # Get list of tables before edits
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;")
+        tables_before = set(row[0] for row in cursor.fetchall())
+        logger.debug(f"Tables before edits: {sorted(tables_before) if tables_before else 'None'}")
 
         for script_name in script_order: 
             logger.debug(f"Executing script: {script_name}")
             sql_script = resources.read_text('sql_scripts.create', script_name)
             cursor.executescript(sql_script)
+        
+        # Get list of tables after edits
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;")
+        tables_after = set(row[0] for row in cursor.fetchall())
+        logger.debug(f"Tables after edits: {sorted(tables_after)}")
+
+        # Log what tables were added
+        tables_added = tables_after - tables_before
+        if tables_added:
+            logger.info(f"New tables added: {sorted(tables_added)}")
+        else:
+            logger.debug("No new tables were added")
+        
         conn.commit()
         conn.close()
 
@@ -147,7 +166,6 @@ class db:
         # now we want to loop over all the evses
         
         # XXX: This skips any stations where there is no availability data.
-        # TODO: Add logging if this if this occurs. That is if there is no availability data.
         if len(evses.keys()) == 0: 
             logger.warning(
                 "No availability data for locationId=%s",
@@ -207,3 +225,133 @@ class db:
             conn.close()
         
         return [row[0] for row in results]  # Extract locationIds
+
+    def query_for_matching_connectorGroups(self, locationId, plugType, speed):
+        revision, connectorGroup = 0, 0
+        try:
+            conn = sqlite3.connect(f'{self.name}.db')
+            cursor = conn.cursor()
+
+            # Load SQL script from file
+            sql_script = resources.read_text('sql_scripts.select', 'select_connectorGroup_by_plugType_speed.sql')
+                
+            cursor.execute(sql_script, (locationId, plugType, speed))
+            result = cursor.fetchone()
+                
+            if result is not None:
+                revision, connectorGroup = result
+            else:
+                logger.warning(f"No matching connectorGroup found for locationId={locationId}, "
+                                f"plugType={plugType}, speed={speed}")
+                        
+            return revision, connectorGroup   
+           
+        except Exception as e:
+            logger.error(f"Database query failed for locationId={locationId}: {e}")
+
+            return revision, connectorGroup 
+        finally:
+            conn.close()
+
+
+    def insert_rows_in_pricesLog_table(self, plug_data):
+        """
+        Insert price data for a specific plug type at a location.
+        
+        Args:
+            plug_data: dict containing plugType, speed, and prices information
+        
+        """
+        locationId = plug_data.get('locationId')
+        
+        for plugGroup in plug_data['plugs']:
+
+            connectors = plugGroup.get('connectors', [])
+            if not connectors:
+                logger.warning(f"No connectors found for locationId={locationId}")
+            # 
+            evseIds = list(set([connector['evseId'] for connector in connectors]))
+            plugTypes = list(set([connector['plugType'] for connector in connectors]))
+            speeds = list(set([connector['speed'] for connector in connectors]))
+
+            mixedPlugTypes, mixedSpeeds = False, False
+            if len(plugTypes) > 1: 
+                logger.warning(f'for {locationId} plugtypes are not homogenous, that is plugtypes {plugTypes} has more than one unique value.')
+                mixedPlugTypes = True
+            if len(speeds) > 1: 
+                logger.warning(f'for {locationId} speeds are not homogenous, that is speeds {speeds} has more than one unique value.')
+                mixedSpeeds = True
+            # searching for revision and connectorGroup
+            revision, connectorGroup = self.query_for_matching_connectorGroups(
+                locationId=locationId, 
+                plugType=plugTypes[0],
+                speed=speeds[0]
+            )
+
+            prices = plugGroup.get('prices', [])
+            nsuccess = 0
+            ntotal = 0
+            for price_entry in prices:
+                product = price_entry.get('product')
+                isFlat = price_entry.get('isFlat')
+                timeTable = price_entry.get('timeTable', [])
+                
+                for time_slot in timeTable:
+                    ntotal += 1
+                    
+                    # Parse datetime strings (format: "DD.MM.YYYY" and "HH:MM")
+                    from_date = time_slot.get('from_date_string')
+                    from_time = time_slot.get('from_time_string')
+                    to_date = time_slot.get('to_date_string')
+                    to_time = time_slot.get('to_time_string')
+                    
+                    # Convert to proper datetime format for SQLite
+                    from_datetime = None
+                    to_datetime = None
+                    
+                    if from_date and from_time:
+                        try:
+                            # Parse "DD.MM.YYYY HH:MM" format
+                            dt_str = f"{from_date} {from_time}"
+                            dt_obj = datetime.strptime(dt_str, "%d.%m.%Y %H:%M")
+                            from_datetime = dt_obj.strftime("%Y-%m-%d %H:%M:%S")
+                        except ValueError as e:
+                            logger.warning(f"Failed to parse from_datetime '{dt_str}': {e}")
+                    
+                    if to_date and to_time:
+                        try:
+                            # Parse "DD.MM.YYYY HH:MM" format
+                            dt_str = f"{to_date} {to_time}"
+                            dt_obj = datetime.strptime(dt_str, "%d.%m.%Y %H:%M")
+                            to_datetime = dt_obj.strftime("%Y-%m-%d %H:%M:%S")
+                        except ValueError as e:
+                            logger.warning(f"Failed to parse to_datetime '{dt_str}': {e}")
+                    
+                    data_row = {
+                        'locationId': locationId,
+                        'revision': revision,
+                        'ConnectorGroup': connectorGroup,
+                        'plugType': plugTypes[0],
+                        'speed': speeds[0],
+                        'product': product,
+                        'isFlat': isFlat,
+                        'from_datetime': from_datetime,
+                        'to_datetime': to_datetime,
+                        'price': time_slot.get('price_string'),
+                        'is_next_day': time_slot.get('is_next_day'),
+                        'timeTableRawData': str(time_slot),
+                        'evseIdsRawData': str(evseIds),
+                        'mixedPlugTypes': mixedPlugTypes,
+                        'mixedSpeeds': mixedSpeeds,
+                    }
+                    
+                    success, error = self.insert_row('pricesLog', row_dict=data_row)
+                    if success:
+                        nsuccess += 1
+                    else:
+                        logger.warning(f"Failed to insert price data for locationId={locationId}, "
+                                    f"plugType={plugTypes[0]}, product={product}: {error}")
+            
+            logger.debug(f"Inserted {nsuccess}/{ntotal} price entries for locationId={locationId}, "
+                        f"plugType={plugTypes[0]}, speed={speeds[0]}")
+        

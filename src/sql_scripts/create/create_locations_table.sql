@@ -1,4 +1,4 @@
-CREATE TABLE locations (
+CREATE TABLE IF NOT EXISTS locations (
     locationId TEXT, 
     revision INTEGER, 
     name TEXT, 
@@ -13,4 +13,4 @@ CREATE TABLE locations (
     PRIMARY KEY (locationId, revision)
 );
 
-CREATE INDEX idx_locationId_revision ON locations(locationId, revision)
+CREATE INDEX IF NOT EXISTS idx_locationId_revision ON locations(locationId, revision)

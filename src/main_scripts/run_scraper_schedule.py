@@ -98,7 +98,7 @@ def run_locations():
                 connectorCount=connectorCount,
             )
 
-    logger.info(f'For {nmissing_ConnectorCounts} locations "connectorCounts" did not exist. Used "plugTypes" instead.')
+    logger.warning(f'For {nmissing_ConnectorCounts} locations "connectorCounts" did not exist. Used "plugTypes" instead.')
     logger.info("Locations scrape completed")
 
 def run_scraper_schedule(scheduler_class=BlockingScheduler):

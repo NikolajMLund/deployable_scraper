@@ -166,9 +166,8 @@ class TestScraperSchedule:
         # Stop scheduler
         sch.shutdown(wait=False)
         
-        # This do not seem to work even though it 
         mock_loc_scraper.run.assert_called_once()
-        mock_avail_scraper.run.assert_called_once() # Cannot get this one to work.
+        mock_avail_scraper.run.assert_called_once() 
         
     
 

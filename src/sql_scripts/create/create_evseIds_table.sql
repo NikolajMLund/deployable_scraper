@@ -1,4 +1,4 @@
-CREATE TABLE evseIds (
+CREATE TABLE IF NOT EXISTS evseIds (
     -- Primary keys
     locationId TEXT, 
     revision INTEGER, 
@@ -24,4 +24,4 @@ CREATE TABLE evseIds (
     PRIMARY KEY (locationId, revision, evseId)
 );
 
-CREATE INDEX idx_locationId_revision_evseId ON evseIds(locationId, revision, evseId)
+CREATE INDEX IF NOT EXISTS idx_locationId_revision_evseId ON evseIds(locationId, revision, evseId)

@@ -1,4 +1,4 @@
-CREATE TABLE connectorGroups (
+CREATE TABLE IF NOT EXISTS connectorGroups (
     locationId TEXT, 
     revision INTEGER,
     connectorGroup INTEGER,  
@@ -12,4 +12,4 @@ CREATE TABLE connectorGroups (
         REFERENCES locations(locationId, revision)
 );
 
-CREATE INDEX idx_location_revision_speed_plugtype ON connectorGroups(locationId, revision, speed, plugType)
+CREATE INDEX IF NOT EXISTS idx_location_revision_speed_plugtype ON connectorGroups(locationId, revision, speed, plugType)

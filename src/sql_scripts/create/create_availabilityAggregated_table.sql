@@ -1,6 +1,6 @@
 -- Python should handle that the foreign Key used actually exists in ConnectorCounts.
 
-CREATE TABLE availabilityAggregated (
+CREATE TABLE IF NOT EXISTS availabilityAggregated (
     locationId TEXT, 
     revision INTEGER,
     connectorGroup INTEGER, 
