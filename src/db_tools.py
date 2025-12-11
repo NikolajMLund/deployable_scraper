@@ -18,6 +18,8 @@ def compute_evseids_hash(evseIds_list):
     # Create hash
     return hashlib.sha256(ids_string.encode()).hexdigest()[:16]  # Use first 16 chars
 
+
+
 class db:
     def __init__(self, name:str):
         self.name = name
@@ -26,6 +28,39 @@ class db:
         _exists=os.path.exists(f'{self.name}.db')
         return _exists
     
+    def enable_wal_mode(self):
+        """Enable WAL mode on existing database"""
+        if not self.check_if_db_exists():
+            logger.warning(f"Database {self.name}.db does not exist yet")
+            return False
+        
+        try:
+            conn = sqlite3.connect(f'{self.name}.db', timeout=30)
+            cursor = conn.cursor()
+            
+            # Check current mode
+            cursor.execute('PRAGMA journal_mode')
+            current_mode = cursor.fetchone()[0]
+            logger.info(f"Current journal mode: {current_mode}")
+            
+            # Enable WAL mode
+            cursor.execute('PRAGMA journal_mode=WAL')
+            new_mode = cursor.fetchone()[0]
+            
+            # Set busy timeout
+            cursor.execute('PRAGMA busy_timeout=10000')
+                        
+            logger.info(f"Journal mode changed: {current_mode} → {new_mode}")
+            return new_mode.lower() == 'wal'
+        
+        except Exception as e:
+            logger.error(f"Failed to enable WAL mode: {e}")
+            return False
+        finally: 
+            if conn: 
+                conn.close()
+
+
     def create_db(self): 
         if self.check_if_db_exists():
             logger.debug(f"Database {self.name} already exist - adding tables if they currently do not exist:")
@@ -33,7 +68,7 @@ class db:
             logger.debug(f"Database {self.name} Initialized - adding tables:")
         
         # connect to db 
-        conn = sqlite3.connect(f'{self.name}.db')
+        conn = sqlite3.connect(f'{self.name}.db', timeout = 30)
         cursor = conn.cursor()
         
         # scripts to execute in specific order
@@ -75,10 +110,14 @@ class db:
 
         logger.info(f"Database initialized successfully at {self.name}.db")
 
+        # switching to wal mode: 
+        self.enable_wal_mode()
+
+
     def insert_row(self, table_name, row_dict):
         """Insert a row into specified table"""
         
-        conn = sqlite3.connect(f'{self.name}.db')
+        conn = sqlite3.connect(f'{self.name}.db', timeout = 30)
         cursor = conn.cursor()
 
         # ensures that foreign_keys are always enabled.
@@ -225,7 +264,7 @@ class db:
 
         sql_script=resources.read_text('sql_scripts.select', 'select_all_locationIds.sql')
 
-        conn = sqlite3.connect(f'{self.name}.db')
+        conn = sqlite3.connect(f'{self.name}.db', timeout = 30)
         cursor = conn.cursor()
         try:
             cursor.execute(sql_script,)
@@ -245,7 +284,7 @@ class db:
 
         sql_script=resources.read_text('sql_scripts.select', 'select_locationIds_by_plugType.sql')
 
-        conn = sqlite3.connect(f'{self.name}.db')
+        conn = sqlite3.connect(f'{self.name}.db', timeout = 30)
         cursor = conn.cursor()
         try:
             cursor.execute(sql_script, (speed,))
@@ -261,7 +300,7 @@ class db:
     def query_for_matching_connectorGroups(self, locationId, plugType, speed):
         revision, connectorGroup = 0, 0
         try:
-            conn = sqlite3.connect(f'{self.name}.db')
+            conn = sqlite3.connect(f'{self.name}.db', timeout = 30)
             cursor = conn.cursor()
 
             # Load SQL script from file
@@ -286,7 +325,7 @@ class db:
             conn.close()
 
     def query_priceGroups_for_priceGroupId(self, locationId, evseidsHash):
-        conn = sqlite3.connect(f'{self.name}.db')
+        conn = sqlite3.connect(f'{self.name}.db', timeout = 30)
         cursor = conn.cursor()
         try:
             # Load SQL script from file
