@@ -240,7 +240,7 @@ def run_scraper_schedule(scheduler_class=BlockingScheduler):
         scheduler = scheduler_class()
         scheduler.add_job(
             func=run_prices,
-            args = [speed, max_workers, sleep_in_seconds, db_pathname], #args to funcs
+            args = [max_workers, sleep_in_seconds, db_pathname], #args to funcs
             trigger = IntervalTrigger(minutes=minute_interval),  # Fixed intervals!
             id = 'Availability_scraper',
             name = f'{speed} Availability Scraper',
