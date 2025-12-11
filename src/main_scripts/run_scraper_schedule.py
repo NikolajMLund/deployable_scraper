@@ -251,6 +251,14 @@ def run_scraper_schedule(scheduler_class=BlockingScheduler):
 
         logger.info("Schedule initialized. Starting scheduled execution loop")
 
+        # Keep running scheduled tasks
+        try:
+            scheduler.start() # blocks if BlockingScheduler is used
+            return scheduler # if BackgroundScheduler is used returns scheduler (used for testing)
+        except (KeyboardInterrupt, SystemExit):
+            logger.info("Scrape schedule was shutdown")
+
+
     elif (run_mode == 'once') and (speed == 'Locations'):
         logger.info('Ran locations scraper.')
     
