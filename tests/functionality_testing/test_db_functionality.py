@@ -185,28 +185,56 @@ def test_insert_locations(tdb_sampledata):
     cursor.close()
     conn.close()
 
-def test_insert_pricesLog(tdb_sampledata):
+def test_insert_priceTimeSlots(tdb_sampledata):
     with open('tests/data/pricing_test.json', 'r', encoding='utf-8') as f:
         pricing = json.load(f)
 
         for locationId in pricing.keys():
             plug_data = pricing[locationId]
-            tdb_sampledata.insert_rows_in_pricesLog_table(plug_data=plug_data)
-        
+            tdb_sampledata.insert_rows_in_priceTimeSlots_table(plug_data=plug_data)
+
         conn = sqlite3.connect(f'{tdb_sampledata.name}.db')
         cursor = conn.cursor()    
-        cursor.execute(f"SELECT COUNT(*) FROM pricesLog")
+
+        cursor.execute(f"SELECT COUNT(*) FROM priceGroups")
         count = cursor.fetchone()[0]
+        assert count == 2, f'Count should be 2, but is {count}'
 
-        assert count == 26, f'Count should be 26, but is {count}'
-
-        cursor.execute(f"SELECT SUM(mixedSpeeds) FROM pricesLog")
+        cursor.execute(f"SELECT SUM(mixedSpeeds) FROM priceGroups")
         sum_mixedSpeeds = cursor.fetchone()[0]
         assert sum_mixedSpeeds == 0, f'SUM(mixedSpeeds) should be zero, but is {sum_mixedSpeeds}'
 
-        cursor.execute(f"SELECT SUM(mixedPlugTypes) FROM pricesLog")
+        cursor.execute(f"SELECT SUM(mixedPlugTypes) FROM priceGroups")
         sum_mixedPlugTypes = cursor.fetchone()[0]
         assert sum_mixedPlugTypes == 0, f'SUM(mixedPlugTypes) should be zero, but is {sum_mixedPlugTypes}'
 
+        cursor.execute(f"SELECT COUNT(*) FROM priceTimeSlots")
+        count = cursor.fetchone()[0]
+        assert count == 26, f'Count should be 2, but is {count}'
+
         cursor.close()
         conn.close()
+
+def test_select_locationId_by_speed(tdb_sampledata):
+    # ['Standard', 'Fast', 'Rapid', 'Unknown']
+    slocids=tdb_sampledata.select_locationIds_by_speed('Standard')
+    flocids=tdb_sampledata.select_locationIds_by_speed('Fast')
+    rlocids=tdb_sampledata.select_locationIds_by_speed('Rapid')
+    ulocids=tdb_sampledata.select_locationIds_by_speed('Unknown')
+
+    scount=len(slocids)
+    fcount=len(flocids)
+    rcount=len(rlocids)
+    ucount=len(ulocids)
+
+    tcount=scount + fcount + rcount + ucount 
+
+    conn = sqlite3.connect(f'{tdb_sampledata.name}.db')
+    cursor = conn.cursor()    
+    cursor.execute(f"SELECT COUNT(*) FROM (SELECT DISTINCT locationId, speed FROM latest_connector_groups);")
+    ncount = cursor.fetchone()[0]
+    assert tcount  ==  ncount, f'number of unique (location, connectorGroup) pairs should be 3145, but found {tcount}'
+
+    cursor.close()
+    conn.close()
+

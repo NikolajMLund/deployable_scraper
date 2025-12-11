@@ -12,4 +12,5 @@ CREATE TABLE IF NOT EXISTS connectorGroups (
         REFERENCES locations(locationId, revision)
 );
 
-CREATE INDEX IF NOT EXISTS idx_location_revision_speed_plugtype ON connectorGroups(locationId, revision, speed, plugType)
+CREATE INDEX IF NOT EXISTS idx_location_revision_speed_plugtype ON connectorGroups(locationId, revision, speed, plugType);
+CREATE INDEX IF NOT EXISTS idx_location_speed_plugtype ON connectorGroups(locationId, speed, plugType);

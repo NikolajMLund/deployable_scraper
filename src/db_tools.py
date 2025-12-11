@@ -3,9 +3,20 @@ import sqlite3
 import logging
 from importlib import resources
 from datetime import datetime
+import json
+import hashlib
 
 # Create module-level logger
 logger = logging.getLogger(__name__)
+
+def compute_evseids_hash(evseIds_list):
+    """Create a consistent hash from evseIds list"""
+    # Sort to ensure same list gives same hash
+    sorted_ids = sorted(evseIds_list)
+    # Convert to JSON string for consistent representation
+    ids_string = json.dumps(sorted_ids, sort_keys=True)
+    # Create hash
+    return hashlib.sha256(ids_string.encode()).hexdigest()[:16]  # Use first 16 chars
 
 class db:
     def __init__(self, name:str):
@@ -33,7 +44,8 @@ class db:
             'create_availabilityLog_table.sql',
             'create_availabilityAggregated_table.sql',
             'create_latest_connectorGroups_newest_revision_view.sql',
-            'create_pricesLog_table.sql',
+            'create_priceGroups_table.sql',
+            'create_priceTimeSlots_table.sql',
         ]
 
         # Get list of tables before edits
@@ -253,8 +265,59 @@ class db:
         finally:
             conn.close()
 
+    def query_priceGroups_for_priceGroupId(self, locationId, evseidsHash):
+        conn = sqlite3.connect(f'{self.name}.db')
+        cursor = conn.cursor()
+        try:
+            # Load SQL script from file
+            sql_script = resources.read_text('sql_scripts.select', 'select_priceGroupId_by_locationId_evseidsHash.sql')
+            
+            cursor.execute(sql_script, (locationId, evseidsHash))
+            result = cursor.fetchone()
+            
+            if result is not None:
+                priceGroupId = result[0]
+                return priceGroupId
+        finally:
+            conn.close()
 
-    def insert_rows_in_pricesLog_table(self, plug_data):
+
+    def insert_row_in_priceGroups_table(
+            self, 
+            locationId, 
+            plugType, 
+            speed,
+            mixedSpeeds,
+            mixedPlugTypes,
+            evseIdsHash,
+            evseIds,
+        ):
+        # searching for revision and connectorGroup - Do this after evseidshash search
+        revision, connectorGroup = self.query_for_matching_connectorGroups(
+            locationId=locationId, 
+            plugType=plugType,
+            speed=speed,
+        )
+
+        data_row = {
+        'locationId': locationId,
+        'revision': revision,
+        'connectorGroup': connectorGroup,
+        'plugType': plugType,
+        'speed': speed,
+        'evseIdsRawData': json.dumps(sorted(evseIds)),
+        'evseIdsHash': evseIdsHash,
+        'mixedPlugTypes': mixedPlugTypes,
+        'mixedSpeeds': mixedSpeeds,
+
+        }
+
+        success, error = self.insert_row('priceGroups', row_dict=data_row)
+        return success, error
+        
+
+    #def insert_rows_in_pricesLog_table(self, plug_data):
+    def insert_rows_in_priceTimeSlots_table(self, plug_data):
         """
         Insert price data for a specific plug type at a location.
         
@@ -269,24 +332,56 @@ class db:
             connectors = plugGroup.get('connectors', [])
             if not connectors:
                 logger.warning(f"No connectors found for locationId={locationId}")
+
             # 
-            evseIds = list(set([connector['evseId'] for connector in connectors]))
+            evseIds = sorted(list(set([connector['evseId'] for connector in connectors])))
             plugTypes = list(set([connector['plugType'] for connector in connectors]))
             speeds = list(set([connector['speed'] for connector in connectors]))
 
+            # Compute hash of evseIds
+            evseIds_hash = compute_evseids_hash(evseIds)
+
             mixedPlugTypes, mixedSpeeds = False, False
             if len(plugTypes) > 1: 
-                logger.warning(f'for {locationId} plugtypes are not homogenous, that is plugtypes {plugTypes} has more than one unique value.')
+                logger.warning(f'for locationId={locationId},evseIds_hash={evseIds_hash} plugtypes are not homogenous, that is plugtypes {plugTypes} has more than one unique value.')
                 mixedPlugTypes = True
             if len(speeds) > 1: 
-                logger.warning(f'for {locationId} speeds are not homogenous, that is speeds {speeds} has more than one unique value.')
+                logger.warning(f'for locationId={locationId},evseIds_hash={evseIds_hash} speeds are not homogenous, that is speeds {speeds} has more than one unique value.')
                 mixedSpeeds = True
-            # searching for revision and connectorGroup
-            revision, connectorGroup = self.query_for_matching_connectorGroups(
-                locationId=locationId, 
-                plugType=plugTypes[0],
-                speed=speeds[0]
+
+            # check if locationId, hash combo exists in priceGroups
+            # I Think I will instead just do this upon failure
+            # But I have to get priceGroupId anyways...  
+            priceGroupId=self.query_priceGroups_for_priceGroupId(
+                locationId=locationId,
+                evseidsHash=evseIds_hash
             )
+
+            if priceGroupId is None:
+                logger.info(f"Failed to find an existing priceGroup for locationId={locationId}, plugType={plugTypes[0]}, speed={speeds[0]}, evseIdsHash={evseIds_hash}")
+                logger.info(f"Attempting Insertion")
+
+                # insert priceGroup Row data
+                self.insert_row_in_priceGroups_table(
+                    locationId=locationId,
+                    plugType=plugTypes[0],
+                    speed=speeds[0],
+                    mixedSpeeds=mixedSpeeds,
+                    mixedPlugTypes=mixedPlugTypes,
+                    evseIds=sorted(evseIds),
+                    evseIdsHash=evseIds_hash,
+                )
+                # and query again
+                priceGroupId=self.query_priceGroups_for_priceGroupId(
+                    locationId=locationId,
+                    evseidsHash=evseIds_hash
+                )
+                
+                if priceGroupId is None: 
+                    logger.warning(f'Failed to insert priceGroupId for locationId={locationId}, plugtypes={plugTypes[0]}, speed={speeds[0]}')
+                else:
+                    logger.info(f'Insertion succesful - given evseIdsHash={evseIds_hash}')
+
 
             prices = plugGroup.get('prices', [])
             nsuccess = 0
@@ -296,7 +391,7 @@ class db:
                 isFlat = price_entry.get('isFlat')
                 timeTable = price_entry.get('timeTable', [])
                 
-                for time_slot in timeTable:
+                for i, time_slot in enumerate(timeTable):
                     ntotal += 1
                     
                     # Parse datetime strings (format: "DD.MM.YYYY" and "HH:MM")
@@ -329,23 +424,19 @@ class db:
                     
                     data_row = {
                         'locationId': locationId,
-                        'revision': revision,
-                        'ConnectorGroup': connectorGroup,
-                        'plugType': plugTypes[0],
-                        'speed': speeds[0],
+                        'priceGroupId': priceGroupId,
                         'product': product,
                         'isFlat': isFlat,
                         'from_datetime': from_datetime,
                         'to_datetime': to_datetime,
+                        'isCurrent': i == 0, # if i is zero it is the first entry in the table which indicate current price
                         'price': time_slot.get('price_string'),
                         'is_next_day': time_slot.get('is_next_day'),
-                        'timeTableRawData': str(time_slot),
-                        'evseIdsRawData': str(evseIds),
-                        'mixedPlugTypes': mixedPlugTypes,
-                        'mixedSpeeds': mixedSpeeds,
+                        'timeTableRawData': json.dumps(time_slot),
                     }
                     
-                    success, error = self.insert_row('pricesLog', row_dict=data_row)
+                    success, error = self.insert_row('priceTimeSlots', row_dict=data_row)
+                    
                     if success:
                         nsuccess += 1
                     else:
