@@ -218,6 +218,26 @@ class db:
                 continue
         return nsuccess, nplugs
 
+    def select_all_locationIds(self):
+        """Get all locationIds (latest revision only)"""
+        
+        logger.debug(f"Selecting all locationIds (latest revision only)")
+
+        sql_script=resources.read_text('sql_scripts.select', 'select_all_locationIds.sql')
+
+        conn = sqlite3.connect(f'{self.name}.db')
+        cursor = conn.cursor()
+        try:
+            cursor.execute(sql_script,)
+            results = cursor.fetchall()
+        except:
+            pass
+        
+        finally: 
+            conn.close()
+
+        return [row[0] for row in results]  # Extract locationIds
+
     def select_locationIds_by_speed(self, speed:str):
         """Get locationIds with specific speed (latest revision only)"""
         
@@ -326,123 +346,151 @@ class db:
         
         """
         locationId = plug_data.get('locationId')
-        
-        for plugGroup in plug_data['plugs']:
+        plugs = plug_data.get('plugs',[])
+        if not plugs: 
+            logger.warning(f"No plugs found for locationId={locationId}")
 
-            connectors = plugGroup.get('connectors', [])
-            if not connectors:
-                logger.warning(f"No connectors found for locationId={locationId}")
+        nsuccess_across_plugs, ntotal_across_plugs = 0, 0
+        for plugGroup in plugs:
+            try:
+                connectors = plugGroup.get('connectors', [])
+                if not connectors:
+                    logger.warning(f"No connectors found for locationId={locationId}")
 
-            # 
-            evseIds = sorted(list(set([connector['evseId'] for connector in connectors])))
-            plugTypes = list(set([connector['plugType'] for connector in connectors]))
-            speeds = list(set([connector['speed'] for connector in connectors]))
+                # 
+                evseIds = sorted(list(set([connector['evseId'] for connector in connectors])))
+                plugTypes = list(set([connector['plugType'] for connector in connectors]))
+                speeds = list(set([connector['speed'] for connector in connectors]))
 
-            # Compute hash of evseIds
-            evseIds_hash = compute_evseids_hash(evseIds)
+                # Compute hash of evseIds
+                evseIds_hash = compute_evseids_hash(evseIds)
 
-            mixedPlugTypes, mixedSpeeds = False, False
-            if len(plugTypes) > 1: 
-                logger.warning(f'for locationId={locationId},evseIds_hash={evseIds_hash} plugtypes are not homogenous, that is plugtypes {plugTypes} has more than one unique value.')
-                mixedPlugTypes = True
-            if len(speeds) > 1: 
-                logger.warning(f'for locationId={locationId},evseIds_hash={evseIds_hash} speeds are not homogenous, that is speeds {speeds} has more than one unique value.')
-                mixedSpeeds = True
+                mixedPlugTypes, mixedSpeeds = False, False
+                if len(plugTypes) > 1: 
+                    logger.warning(f'for locationId={locationId},evseIds_hash={evseIds_hash} plugtypes are not homogenous, that is plugtypes {plugTypes} has more than one unique value.')
+                    mixedPlugTypes = True
+                if len(speeds) > 1: 
+                    logger.warning(f'for locationId={locationId},evseIds_hash={evseIds_hash} speeds are not homogenous, that is speeds {speeds} has more than one unique value.')
+                    mixedSpeeds = True
 
-            # check if locationId, hash combo exists in priceGroups
-            # I Think I will instead just do this upon failure
-            # But I have to get priceGroupId anyways...  
-            priceGroupId=self.query_priceGroups_for_priceGroupId(
-                locationId=locationId,
-                evseidsHash=evseIds_hash
-            )
-
-            if priceGroupId is None:
-                logger.info(f"Failed to find an existing priceGroup for locationId={locationId}, plugType={plugTypes[0]}, speed={speeds[0]}, evseIdsHash={evseIds_hash}")
-                logger.info(f"Attempting Insertion")
-
-                # insert priceGroup Row data
-                self.insert_row_in_priceGroups_table(
-                    locationId=locationId,
-                    plugType=plugTypes[0],
-                    speed=speeds[0],
-                    mixedSpeeds=mixedSpeeds,
-                    mixedPlugTypes=mixedPlugTypes,
-                    evseIds=sorted(evseIds),
-                    evseIdsHash=evseIds_hash,
-                )
-                # and query again
+                # check if locationId, hash combo exists in priceGroups
+                # I Think I will instead just do this upon failure
+                # But I have to get priceGroupId anyways...  
                 priceGroupId=self.query_priceGroups_for_priceGroupId(
                     locationId=locationId,
                     evseidsHash=evseIds_hash
                 )
-                
-                if priceGroupId is None: 
-                    logger.warning(f'Failed to insert priceGroupId for locationId={locationId}, plugtypes={plugTypes[0]}, speed={speeds[0]}')
-                else:
-                    logger.info(f'Insertion succesful - given evseIdsHash={evseIds_hash}')
 
+                if priceGroupId is None:
+                    logger.debug(f"Failed to find an existing priceGroup for locationId={locationId}, plugType={plugTypes[0]}, speed={speeds[0]}, evseIdsHash={evseIds_hash}")
+                    logger.debug(f"Attempting Insertion")
 
-            prices = plugGroup.get('prices', [])
-            nsuccess = 0
-            ntotal = 0
-            for price_entry in prices:
-                product = price_entry.get('product')
-                isFlat = price_entry.get('isFlat')
-                timeTable = price_entry.get('timeTable', [])
-                
-                for i, time_slot in enumerate(timeTable):
-                    ntotal += 1
+                    # insert priceGroup Row data
+                    self.insert_row_in_priceGroups_table(
+                        locationId=locationId,
+                        plugType=plugTypes[0],
+                        speed=speeds[0],
+                        mixedSpeeds=mixedSpeeds,
+                        mixedPlugTypes=mixedPlugTypes,
+                        evseIds=sorted(evseIds),
+                        evseIdsHash=evseIds_hash,
+                    )
+                    # and query again
+                    priceGroupId=self.query_priceGroups_for_priceGroupId(
+                        locationId=locationId,
+                        evseidsHash=evseIds_hash
+                    )
                     
-                    # Parse datetime strings (format: "DD.MM.YYYY" and "HH:MM")
-                    from_date = time_slot.get('from_date_string')
-                    from_time = time_slot.get('from_time_string')
-                    to_date = time_slot.get('to_date_string')
-                    to_time = time_slot.get('to_time_string')
-                    
-                    # Convert to proper datetime format for SQLite
-                    from_datetime = None
-                    to_datetime = None
-                    
-                    if from_date and from_time:
-                        try:
-                            # Parse "DD.MM.YYYY HH:MM" format
-                            dt_str = f"{from_date} {from_time}"
-                            dt_obj = datetime.strptime(dt_str, "%d.%m.%Y %H:%M")
-                            from_datetime = dt_obj.strftime("%Y-%m-%d %H:%M:%S")
-                        except ValueError as e:
-                            logger.warning(f"Failed to parse from_datetime '{dt_str}': {e}")
-                    
-                    if to_date and to_time:
-                        try:
-                            # Parse "DD.MM.YYYY HH:MM" format
-                            dt_str = f"{to_date} {to_time}"
-                            dt_obj = datetime.strptime(dt_str, "%d.%m.%Y %H:%M")
-                            to_datetime = dt_obj.strftime("%Y-%m-%d %H:%M:%S")
-                        except ValueError as e:
-                            logger.warning(f"Failed to parse to_datetime '{dt_str}': {e}")
-                    
-                    data_row = {
-                        'locationId': locationId,
-                        'priceGroupId': priceGroupId,
-                        'product': product,
-                        'isFlat': isFlat,
-                        'from_datetime': from_datetime,
-                        'to_datetime': to_datetime,
-                        'isCurrent': i == 0, # if i is zero it is the first entry in the table which indicate current price
-                        'price': time_slot.get('price_string'),
-                        'is_next_day': time_slot.get('is_next_day'),
-                        'timeTableRawData': json.dumps(time_slot),
-                    }
-                    
-                    success, error = self.insert_row('priceTimeSlots', row_dict=data_row)
-                    
-                    if success:
-                        nsuccess += 1
+                    if priceGroupId is None: 
+                        logger.warning(f'Failed to insert priceGroupId into priceGroup table for locationId={locationId}, plugtypes={plugTypes[0]}, speed={speeds[0]}')
                     else:
-                        logger.warning(f"Failed to insert price data for locationId={locationId}, "
-                                    f"plugType={plugTypes[0]}, product={product}: {error}")
+                        logger.info(f'Insertion succesful - Created new priceGroupId={priceGroupId} for evseIdsHash={evseIds_hash}')
+                else:
+                    logger.debug(f'Found existing priceGroupId={evseIds_hash}')
+
+                prices = plugGroup.get('prices', [])
+                nsuccess = 0
+                ntotal = 0
+                for price_entry in prices:
+                    product = price_entry.get('product')
+                    isFlat = price_entry.get('isFlat')
+                    timeTable = price_entry.get('timeTable', [])
+                    
+                    for i, time_slot in enumerate(timeTable):
+                        ntotal += 1
+                        
+                        # Parse datetime strings (format: "DD.MM.YYYY" and "HH:MM")
+                        from_date = time_slot.get('from_date_string')
+                        from_time = time_slot.get('from_time_string')
+                        to_date = time_slot.get('to_date_string')
+                        to_time = time_slot.get('to_time_string')
+                        
+                        # Convert to proper datetime format for SQLite
+                        from_datetime = None
+                        to_datetime = None
+                        
+                        backup_data = False
+                        if from_date and from_time:
+                            try:
+                                # Parse "DD.MM.YYYY HH:MM" format
+                                dt_str = f"{from_date} {from_time}"
+                                dt_obj = datetime.strptime(dt_str, "%d.%m.%Y %H:%M")
+                                from_datetime = dt_obj.strftime("%Y-%m-%d %H:%M:%S")
+                            except ValueError as e:
+                                logger.warning(f"Failed to parse from_datetime '{dt_str}': {e}")
+                                backup_data = True
+                        
+                        if to_date and to_time:
+                            try:
+                                # Parse "DD.MM.YYYY HH:MM" format
+                                dt_str = f"{to_date} {to_time}"
+                                dt_obj = datetime.strptime(dt_str, "%d.%m.%Y %H:%M")
+                                to_datetime = dt_obj.strftime("%Y-%m-%d %H:%M:%S")
+                            except ValueError as e:
+                                logger.warning(f"Failed to parse to_datetime '{dt_str}': {e}")
+                                backup_data=True
+                    
+                        # validate prices are not none
+                        price = time_slot.get('price_string')
+                        if price is None: 
+                            backup_data=True
+                        
+                        # backing up data if something crazy happens but otherwise no backup is done.
+                        timeTableRawData = None
+                        if backup_data:
+                            timeTableRawData = json.dumps(time_slot)
+                        
+                        data_row = {
+                            'locationId': locationId,
+                            'priceGroupId': priceGroupId,
+                            'product': product,
+                            'isFlat': isFlat,
+                            'from_datetime': from_datetime,
+                            'to_datetime': to_datetime,
+                            'isCurrent': i == 0, # if i is zero it is the first entry in the table which indicate current price
+                            'price': price,
+                            'is_next_day': time_slot.get('is_next_day'),
+                            'timeTableRawData': timeTableRawData,
+                        }
+                        
+                        success, error = self.insert_row('priceTimeSlots', row_dict=data_row)
+                        
+                        if success:
+                            nsuccess += 1
+                        else:
+                            logger.warning(f"Failed to insert price data for locationId={locationId}, "
+                                        f"plugType={plugTypes[0]}, product={product}: {error}")
+                
+                logger.debug(f"Inserted {nsuccess}/{ntotal} price entries for locationId={locationId}, "
+                            f"plugType={plugTypes[0]}, speed={speeds[0]}")
+                
+                nsuccess_across_plugs += nsuccess
+                ntotal_across_plugs += ntotal
             
-            logger.debug(f"Inserted {nsuccess}/{ntotal} price entries for locationId={locationId}, "
-                        f"plugType={plugTypes[0]}, speed={speeds[0]}")
-        
+            except AttributeError as e:
+                logger.warning(
+                    f'AttributeError for locationId={locationId}, Error: {str(e)}')
+                ntotal_across_plugs += ntotal
+                continue
+
+        return nsuccess_across_plugs, ntotal_across_plugs

@@ -189,6 +189,11 @@ def test_insert_priceTimeSlots(tdb_sampledata):
     with open('tests/data/pricing_test.json', 'r', encoding='utf-8') as f:
         pricing = json.load(f)
 
+        # inserting data twice to see check if PriceGroups are functioning properly
+        for locationId in pricing.keys():
+            plug_data = pricing[locationId]
+            tdb_sampledata.insert_rows_in_priceTimeSlots_table(plug_data=plug_data)
+        
         for locationId in pricing.keys():
             plug_data = pricing[locationId]
             tdb_sampledata.insert_rows_in_priceTimeSlots_table(plug_data=plug_data)
@@ -198,7 +203,7 @@ def test_insert_priceTimeSlots(tdb_sampledata):
 
         cursor.execute(f"SELECT COUNT(*) FROM priceGroups")
         count = cursor.fetchone()[0]
-        assert count == 2, f'Count should be 2, but is {count}'
+        assert count == 2, f'row Count in priceGroups should be 2, but is {count}'
 
         cursor.execute(f"SELECT SUM(mixedSpeeds) FROM priceGroups")
         sum_mixedSpeeds = cursor.fetchone()[0]
@@ -210,7 +215,7 @@ def test_insert_priceTimeSlots(tdb_sampledata):
 
         cursor.execute(f"SELECT COUNT(*) FROM priceTimeSlots")
         count = cursor.fetchone()[0]
-        assert count == 26, f'Count should be 2, but is {count}'
+        assert count == 52, f'row Count in priceTimeSlots should be 52, but is {count}'
 
         cursor.close()
         conn.close()

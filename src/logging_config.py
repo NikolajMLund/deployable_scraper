@@ -5,6 +5,11 @@ import os
 import sys
 
 def setup_logging():
+
+    # Don't reconfigure if running in pytest
+    if os.getenv('PYTEST_CURRENT_TEST'):
+        return  # Skip - let pytest handle logging
+    
     log_level = os.getenv('LOG_LEVEL', 'INFO')  # defaults to INFO when not set
     scraper_type = os.getenv('SCRAPER_TYPE', 'unknown')
     scraper_type_upper = scraper_type.upper()

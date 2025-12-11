@@ -1,6 +1,6 @@
 from scrapers.with_requests.scrape_availability_with_api import scraper as avail_scraper
 from scrapers.with_requests.scrape_locations_with_api import scraper as loc_scraper 
-
+from scrapers.with_requests.scrape_prices_with_api import scraper as price_scraper
 from db_tools import db
 from logging_config import setup_logging
 
@@ -15,12 +15,14 @@ from datetime import datetime, timedelta
 # Get logger for this module
 logger = logging.getLogger(__name__)
 
-def run_avail(speed:str, max_workers:int, sleep_in_seconds:float): 
+def run_avail(speed:str, max_workers:int, sleep_in_seconds:float, db_pathname:str='./data/db/charging'): 
+    logger.info("="*60)
     logger.info(f"Starting availability scrape for speed: {speed}")
+    logger.info("="*60)
     
     # create database connection
     database = db(
-        name='./data/db/charging'
+        name=db_pathname
     )
     database.create_db()
 
@@ -57,9 +59,11 @@ def run_avail(speed:str, max_workers:int, sleep_in_seconds:float):
     logger.info(f"Availability db-insertion completed for speed: {speed}, Inserted {ntotalsuccess} rows. Found ids for {ntotalplugs} plugs.")
 
 
-def run_locations():
+def run_locations(db_pathname:str='./data/db/charging'):
+    logger.info("="*60)
     logger.info("Starting locations scrape")
-    
+    logger.info("="*60)
+
     locations_scraper=loc_scraper(
         keyword='locations',
         identifiers=['locations'],
@@ -75,7 +79,7 @@ def run_locations():
     logger.info(f"Retrieved {len(locations)} locations")
     
     # Insert into database: 
-    database=db(name='./data/db/charging')
+    database=db(name=db_pathname)
     database.create_db()
 
     nmissing_ConnectorCounts = 0
@@ -101,6 +105,51 @@ def run_locations():
     logger.warning(f'For {nmissing_ConnectorCounts} locations "connectorCounts" did not exist. Used "plugTypes" instead.')
     logger.info("Locations scrape completed")
 
+def run_prices(max_workers:int, sleep_in_seconds:float, db_pathname:str='./data/db/charging'):
+    logger.info("="*60)
+    logger.info("Starting pricing scrape for pricing TimeSlots")
+    logger.info("="*60)
+
+    # create database connection
+    database = db(name=db_pathname)
+    database.create_db()
+
+    # get locationIds
+    locids = database.select_all_locationIds()
+    logger.info(f"Found {len(locids)} locations for price scraping")
+
+    # setup scraper
+    options = {'timeout': 30, 'sleep_in_seconds': sleep_in_seconds}
+    prices_scraper = price_scraper(
+        keyword='prices',
+        identifiers=locids,
+        url_re='https://clever.dk/api/v2/chargers/location/{}',
+        out_path='./data/',
+        save_json=False,
+        options=options,
+    )
+
+    # run scraper
+    logger.info("Running prices scraper")
+    prices_scraper.run(max_workers=max_workers)
+    price_data = prices_scraper.results
+    logger.info(f"price scraping completed. Processing {len(price_data)} results")
+
+    # insert into database
+    ntotalsuccess = 0
+    ntotaltotal = 0 
+    for locationId in price_data.keys():
+        plug_data = price_data[locationId]
+        nsuccess, ntotal=database.insert_rows_in_priceTimeSlots_table(plug_data=plug_data)
+        ntotalsuccess += nsuccess
+        ntotaltotal += ntotal
+    
+    nfailures = ntotaltotal - ntotalsuccess
+    logger.info(f"Prices db-insertion completed. Inserted {ntotalsuccess} rows")
+    if nfailures > 0: 
+        logger.warning(f'price scraper had a total of {nfailures} failures when trying to insert data.')
+    
+
 def run_scraper_schedule(scheduler_class=BlockingScheduler):
     # Initialize logging FIRST, before any other code runs
     setup_logging()
@@ -109,10 +158,6 @@ def run_scraper_schedule(scheduler_class=BlockingScheduler):
     logger.info("Scraper Application Starting")
     logger.info("="*60)
     
-
-    # On startup always populate locations table, and initialize database if it does not exist
-    run_locations()
-
     # retrieving scraper settings
     speed = os.environ.get('SCRAPER_TYPE').capitalize()
     minute_interval=int(os.environ.get('MINUTE_INTERVAL', 9999))
@@ -120,6 +165,10 @@ def run_scraper_schedule(scheduler_class=BlockingScheduler):
     run_mode = os.environ.get('RUN_MODE', 'once') # defaults to 'once if RUN_MODE does not exist
     max_workers = int(os.environ.get('MAX_WORKERS', 1))
     sleep_in_seconds = float(os.environ.get('SLEEP_IN_SECONDS', 0.0))
+    db_pathname = os.environ.get('DB_PATHNAME', './data/db/charging')
+    
+    # On startup always populate locations table, and initialize database if it does not exist
+    run_locations(db_pathname=db_pathname)
 
     if (run_mode == 'scheduled') and (speed in ['Standard', 'Fast', 'Rapid']):
         logger.info('Initializing run schedule')
@@ -134,7 +183,7 @@ def run_scraper_schedule(scheduler_class=BlockingScheduler):
         scheduler = scheduler_class()
         scheduler.add_job(
             func=run_avail,
-            args = [speed, max_workers, sleep_in_seconds], #args to funcs
+            args = [speed, max_workers, sleep_in_seconds, db_pathname], #args to funcs
             trigger = IntervalTrigger(minutes=minute_interval),  # Fixed intervals!
             id = 'Availability_scraper',
             name = f'{speed} Availability Scraper',
@@ -163,6 +212,7 @@ def run_scraper_schedule(scheduler_class=BlockingScheduler):
         scheduler = scheduler_class()
         scheduler.add_job(
             func=run_locations,
+            args = [db_pathname],
             trigger = IntervalTrigger(days=location_day_interval),  # Fixed intervals!
             id = 'locations_scraper',
             name = 'locations Scraper',
@@ -178,6 +228,28 @@ def run_scraper_schedule(scheduler_class=BlockingScheduler):
             return scheduler # if BackgroundScheduler is used returns scheduler (used for testing)
         except (KeyboardInterrupt, SystemExit):
             logger.info("Scrape schedule was shutdown")
+
+    elif (run_mode =='scheduled') and (speed == 'Prices'):
+        logger.info(f"Schedule configuration:")
+        logger.info(f"  - Max workers: using {max_workers} workers")
+        logger.info(f"  - Scraper type: {speed}")
+        logger.info(f"  - Scrape interval: every {minute_interval} minutes")
+        logger.info(f"  - sleep between requests: every {sleep_in_seconds} seconds")
+
+        # Set the schedule - availability: 
+        scheduler = scheduler_class()
+        scheduler.add_job(
+            func=run_prices,
+            args = [speed, max_workers, sleep_in_seconds, db_pathname], #args to funcs
+            trigger = IntervalTrigger(minutes=minute_interval),  # Fixed intervals!
+            id = 'Availability_scraper',
+            name = f'{speed} Availability Scraper',
+            max_instances = 1,  # Prevents overlaps
+            coalesce=True,
+            next_run_time=datetime.now() + timedelta(seconds=1) # Runs at once when initialized
+        )
+
+        logger.info("Schedule initialized. Starting scheduled execution loop")
 
     elif (run_mode == 'once') and (speed == 'Locations'):
         logger.info('Ran locations scraper.')
@@ -195,7 +267,23 @@ def run_scraper_schedule(scheduler_class=BlockingScheduler):
             speed=speed, 
             max_workers=max_workers, 
             sleep_in_seconds=sleep_in_seconds,
+            db_pathname=db_pathname,
         )
+
+    elif (run_mode == 'once' and (speed == 'Prices')):
+        logger.info('Initializing run schedule')
+        logger.info(f"  - Max workers: using {max_workers} workers")
+        logger.info(f"Schedule configuration:")
+        logger.info(f"  - Scraper type: {speed}")
+        logger.info(f"  - Scrape interval: Once")
+        logger.info(f"  - sleep between requests: every {sleep_in_seconds} seconds")
+
+        run_prices(
+            max_workers=max_workers,
+            sleep_in_seconds=sleep_in_seconds,
+            db_pathname=db_pathname
+        )
+
     else:
         logger.warning(f"Scraper configs could not be resolved.")
 
