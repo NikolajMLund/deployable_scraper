@@ -60,3 +60,18 @@ services:
       - LOCATION_DAY_INTERVAL=7
 
     restart: unless-stopped
+
+  prices:
+    build: .
+    volumes:
+      - ./data/db:/app/data/db
+      - ./data/logs:/app/data/logs
+    command: python src/main_scripts/run_scraper_schedule.py
+    working_dir: /app
+    environment:
+      - RUN_MODE=scheduled      # Scheduling mode
+      - LOG_LEVEL=INFO          # how much info to log
+      - SCRAPER_TYPE=prices
+      - MINUTE_INTERVAL=60
+
+    restart: unless-stopped
