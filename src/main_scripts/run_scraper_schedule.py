@@ -236,14 +236,14 @@ def run_scraper_schedule(scheduler_class=BlockingScheduler):
         logger.info(f"  - Scrape interval: every {minute_interval} minutes")
         logger.info(f"  - sleep between requests: every {sleep_in_seconds} seconds")
 
-        # Set the schedule - availability: 
+        # Set the schedule - prices: 
         scheduler = scheduler_class()
         scheduler.add_job(
             func=run_prices,
             args = [max_workers, sleep_in_seconds, db_pathname], #args to funcs
             trigger = IntervalTrigger(minutes=minute_interval),  # Fixed intervals!
-            id = 'Availability_scraper',
-            name = f'{speed} Availability Scraper',
+            id = 'Prices_scraper',
+            name = f'Prices Scraper',
             max_instances = 1,  # Prevents overlaps
             coalesce=True,
             next_run_time=datetime.now() + timedelta(seconds=1) # Runs at once when initialized
