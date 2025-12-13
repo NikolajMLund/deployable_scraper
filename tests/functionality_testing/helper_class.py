@@ -1,6 +1,7 @@
 from db_tools import db
 import json
 import os
+import sqlite3
 
 class tdb(db): 
     """
@@ -13,35 +14,37 @@ class tdb(db):
         with open('tests/data/location_test.json', 'r', encoding='utf-8') as f:
             locations = json.load(f)
 
-        for k in locations['locations'].keys():
-            v = locations['locations'][k]
+        with sqlite3.connect(f'{self.name}.db', timeout=30) as conn:
+            for k in locations['locations'].keys():
+                v = locations['locations'][k]
+                self.insert_row_in_locations_table(conn, v)        
+        conn.close()
 
-            self.insert_row_in_locations_table(v)
-
-
-    def insert_connectorGroup_test_data(self):
+    def insert_connectorGroup_test_data(self,):
         """
         
         """
         with open('tests/data/location_test.json', 'r', encoding='utf-8') as f:
             locations = json.load(f)
 
+        with sqlite3.connect(f'{self.name}.db', timeout=30) as conn:
+            nmissing_ConnectorCounts = 0
+            for k in locations['locations'].keys():
+                v = locations['locations'][k]
+                try: 
+                    connector_dict = v['connectorCounts']
+                except KeyError:
+                    connector_dict = v['plugTypes']
+                    nmissing_ConnectorCounts += 1
 
-        nmissing_ConnectorCounts = 0
-        for k in locations['locations'].keys():
-            v = locations['locations'][k]
-            try: 
-                connector_dict = v['connectorCounts']
-            except KeyError:
-                connector_dict = v['plugTypes']
-                nmissing_ConnectorCounts += 1
-
-            for connectorGroup, connectorCount in enumerate(connector_dict):  
-                self.insert_row_in_connectorGroup_table(
-                    location=v, 
-                    connectorGroup=connectorGroup, 
-                    connectorCount=connectorCount,
-                )
+                for connectorGroup, connectorCount in enumerate(connector_dict):  
+                    self.insert_row_in_connectorGroup_table(
+                        conn=conn,
+                        location=v, 
+                        connectorGroup=connectorGroup, 
+                        connectorCount=connectorCount,
+                    )
+        conn.close()
 
         print(f'for {nmissing_ConnectorCounts} locations "connectorCounts" did not exist. Used "plugTypes" instead.')
 

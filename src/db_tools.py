@@ -114,40 +114,32 @@ class db:
         self.enable_wal_mode()
 
 
-    def insert_row(self, table_name, row_dict):
+    def insert_row(self, conn, table_name, row_dict):
         """Insert a row into specified table"""
         
-        conn = sqlite3.connect(f'{self.name}.db', timeout = 30)
         cursor = conn.cursor()
 
         # ensures that foreign_keys are always enabled.
         cursor.execute("PRAGMA foreign_keys = ON;")
                
-        try:
-            # Build the INSERT statement dynamically
-            columns = ', '.join(row_dict.keys())
-            placeholders = ', '.join(['?' for _ in row_dict])
-            values = list(row_dict.values())
-            
-            
-            sql = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders})"
+        # Build the INSERT statement dynamically
+        columns = ', '.join(row_dict.keys())
+        placeholders = ', '.join(['?' for _ in row_dict])
+        values = list(row_dict.values())
+        sql = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders})"
+        try:                
+            cursor.execute("SAVEPOINT sp")
             cursor.execute(sql, values)
-            conn.commit()
-            
+            cursor.execute("RELEASE sp")
             logger.debug(f"✅ Successfully inserted row into {table_name}")
-
             return True, None
-            
         except sqlite3.Error as e:
+            cursor.execute("ROLLBACK TO sp")
+            cursor.execute("RELEASE sp")
             logger.debug(f"❌ Error inserting into {table_name}: {e}", exc_info=True)
-
-            conn.rollback()
             return False, e
-            
-        finally:
-            conn.close()
 
-    def insert_row_in_locations_table(self, location):
+    def insert_row_in_locations_table(self, conn, location):
         # adding these to ensure that if there is ever a case v_coords coordinates or timestamp does not exist then
         # we can still call with get and get nan values
         location_coords = location.get('coordinates', {})
@@ -166,9 +158,9 @@ class db:
             'ts_nanoseconds': location_timestamp.get('nanoseconds'),
         }
         
-        self.insert_row('locations', row_dict=data_row)
+        self.insert_row(conn, 'locations', row_dict=data_row)
 
-    def insert_row_in_connectorGroup_table(self, location:dict, connectorGroup:int, connectorCount:dict):
+    def insert_row_in_connectorGroup_table(self, conn, location:dict, connectorGroup:int, connectorCount:dict):
 
         data_row = {
             'locationId': location.get('locationId') ,
@@ -179,12 +171,12 @@ class db:
             'count': connectorCount.get('count'),
         }
         
-        success, error=self.insert_row('connectorGroups', row_dict=data_row)
+        success, error=self.insert_row(conn, 'connectorGroups', row_dict=data_row)
 
         return success, error
 
 
-    def insert_row_in_evseIds_table(self, location, evse:dict): 
+    def insert_row_in_evseIds_table(self, conn, location, evse:dict): 
         """
         The evse object is a dict and is a value returned from the 'evses' object. 
         """
@@ -208,9 +200,9 @@ class db:
             'connectorId': plug_info.get('connectorId'),
             'speed': plug_info.get('speed'),
             }
-            success, error=self.insert_row(table_name='evseIds', row_dict=data_row)
+            success, error=self.insert_row(conn, table_name='evseIds', row_dict=data_row)
 
-    def insert_row_in_availabilityLog_table(self, loc_avail_query):
+    def insert_row_in_availabilityLog_table(self, conn, loc_avail_query):
         evses = loc_avail_query.get('availability', {}).get('evses', {})
         evses_pluginfo = loc_avail_query.get('evses')
         nplugs = len(evses_pluginfo.keys())
@@ -239,11 +231,15 @@ class db:
                 'timestamp': evse.get('timestamp')
                 }
                 success = False
-                success, error=self.insert_row('availabilityLog', row_dict=data_row)
+                success, error=self.insert_row(conn, 'availabilityLog', row_dict=data_row)
 
                 if (not success) and (error.sqlite_errorcode == 787):
-                    self.insert_row_in_evseIds_table(location=loc_avail_query, evse=evse_pluginfo)
-                    success, error=self.insert_row('availabilityLog', row_dict=data_row)
+                    self.insert_row_in_evseIds_table(
+                        conn=conn,
+                        location=loc_avail_query, 
+                        evse=evse_pluginfo
+                    )
+                    success, error=self.insert_row(conn, 'availabilityLog', row_dict=data_row)
                 
                 # add to nsuccess
                 nsuccess += int(success)
@@ -257,7 +253,7 @@ class db:
                 continue
         return nsuccess, nplugs
 
-    def select_all_locationIds(self):
+    def select_all_locationIds(self,):
         """Get all locationIds (latest revision only)"""
         
         logger.debug(f"Selecting all locationIds (latest revision only)")
@@ -273,7 +269,8 @@ class db:
             pass
         
         finally: 
-            conn.close()
+            if conn:
+                conn.close()
 
         return [row[0] for row in results]  # Extract locationIds
 
@@ -297,10 +294,9 @@ class db:
         
         return [row[0] for row in results]  # Extract locationIds
 
-    def query_for_matching_connectorGroups(self, locationId, plugType, speed):
+    def query_for_matching_connectorGroups(self, conn, locationId, plugType, speed):
         revision, connectorGroup = 0, 0
         try:
-            conn = sqlite3.connect(f'{self.name}.db', timeout = 30)
             cursor = conn.cursor()
 
             # Load SQL script from file
@@ -321,28 +317,22 @@ class db:
             logger.error(f"Database query failed for locationId={locationId}: {e}")
 
             return revision, connectorGroup 
-        finally:
-            conn.close()
 
-    def query_priceGroups_for_priceGroupId(self, locationId, evseidsHash):
-        conn = sqlite3.connect(f'{self.name}.db', timeout = 30)
+    def query_priceGroups_for_priceGroupId(self, conn, locationId, evseidsHash):
         cursor = conn.cursor()
-        try:
-            # Load SQL script from file
-            sql_script = resources.read_text('sql_scripts.select', 'select_priceGroupId_by_locationId_evseidsHash.sql')
-            
-            cursor.execute(sql_script, (locationId, evseidsHash))
-            result = cursor.fetchone()
-            
-            if result is not None:
-                priceGroupId = result[0]
-                return priceGroupId
-        finally:
-            conn.close()
-
+        # Load SQL script from file
+        sql_script = resources.read_text('sql_scripts.select', 'select_priceGroupId_by_locationId_evseidsHash.sql')
+        
+        cursor.execute(sql_script, (locationId, evseidsHash))
+        result = cursor.fetchone()
+        
+        if result is not None:
+            priceGroupId = result[0]
+            return priceGroupId
 
     def insert_row_in_priceGroups_table(
             self, 
+            conn,
             locationId, 
             plugType, 
             speed,
@@ -353,6 +343,7 @@ class db:
         ):
         # searching for revision and connectorGroup - Do this after evseidshash search
         revision, connectorGroup = self.query_for_matching_connectorGroups(
+            conn,
             locationId=locationId, 
             plugType=plugType,
             speed=speed,
@@ -371,12 +362,10 @@ class db:
 
         }
 
-        success, error = self.insert_row('priceGroups', row_dict=data_row)
+        success, error = self.insert_row(conn, 'priceGroups', row_dict=data_row)
         return success, error
-        
-
-    #def insert_rows_in_pricesLog_table(self, plug_data):
-    def insert_rows_in_priceTimeSlots_table(self, plug_data):
+    
+    def insert_rows_in_priceTimeSlots_table(self, conn, plug_data):
         """
         Insert price data for a specific plug type at a location.
         
@@ -416,6 +405,7 @@ class db:
                 # I Think I will instead just do this upon failure
                 # But I have to get priceGroupId anyways...  
                 priceGroupId=self.query_priceGroups_for_priceGroupId(
+                    conn=conn,
                     locationId=locationId,
                     evseidsHash=evseIds_hash
                 )
@@ -426,6 +416,7 @@ class db:
 
                     # insert priceGroup Row data
                     self.insert_row_in_priceGroups_table(
+                        conn=conn,
                         locationId=locationId,
                         plugType=plugTypes[0],
                         speed=speeds[0],
@@ -436,6 +427,7 @@ class db:
                     )
                     # and query again
                     priceGroupId=self.query_priceGroups_for_priceGroupId(
+                        conn=conn,
                         locationId=locationId,
                         evseidsHash=evseIds_hash
                     )
@@ -512,7 +504,11 @@ class db:
                             'timeTableRawData': timeTableRawData,
                         }
                         
-                        success, error = self.insert_row('priceTimeSlots', row_dict=data_row)
+                        success, error = self.insert_row(
+                            conn=conn,
+                            table_name='priceTimeSlots', 
+                            row_dict=data_row
+                        )
                         
                         if success:
                             nsuccess += 1

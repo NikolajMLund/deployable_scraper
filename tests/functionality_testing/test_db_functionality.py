@@ -36,8 +36,9 @@ def tdb_mockdata(tdb):
         'ts_seconds':  100,
         'ts_nanoseconds': 200,
     }
-    tdb.insert_row('locations', loc_insert)
-
+    with sqlite3.connect(f'{tdb.name}.db', timeout=30) as conn: 
+        tdb.insert_row(conn, 'locations', loc_insert)
+    conn.close()
 
     ## Inserting connectorCounts into db.
     connector_count_insert = {
@@ -45,7 +46,9 @@ def tdb_mockdata(tdb):
         'revision': 1, 
         'connectorGroup': 1, 
     }
-    tdb.insert_row('connectorGroups', connector_count_insert)
+    with sqlite3.connect(f'{tdb.name}.db', timeout=30) as conn: 
+        tdb.insert_row(conn, 'connectorGroups', connector_count_insert)
+    conn.close()
 
     ## Inserting evseids into db.
     evse_insert = {
@@ -53,8 +56,9 @@ def tdb_mockdata(tdb):
         'revision': 1,
         'evseId': '1',
     }
-    tdb.insert_row('evseids', evse_insert)
-
+    with sqlite3.connect(f'{tdb.name}.db', timeout=30) as conn: 
+        tdb.insert_row(conn, 'evseids', evse_insert)
+    conn.close()
     return tdb
 
 
@@ -66,8 +70,6 @@ def test_create_db(tdb):
     assert tdb.check_if_db_exists(), f'{tdb.name}.db was not created'
 
 def test_foreign_keys_on_availabilityAggregated(tdb_mockdata):
-    # Populating test db. 
-    ## Inserting locations into db.
     ## insert create_availabilityAggregated_table with right parameters
     availability_agg_insert = {
         'locationId': 'ABC',
@@ -77,8 +79,9 @@ def test_foreign_keys_on_availabilityAggregated(tdb_mockdata):
         'totalCount': 2,
         'createdAt': 100
     }
-    success, error=tdb_mockdata.insert_row('availabilityAggregated', availability_agg_insert)
-
+    with sqlite3.connect(f'{tdb_mockdata.name}.db', timeout=30) as conn: 
+        success, error=tdb_mockdata.insert_row(conn, 'availabilityAggregated', availability_agg_insert)
+    conn.close()
     assert success, 'Could not insert correct data into AvailabilityLog'
 
     ## insert create_availabilityAggregated_table with wrong parameters
@@ -90,9 +93,9 @@ def test_foreign_keys_on_availabilityAggregated(tdb_mockdata):
         'totalCount': 2,
         'createdAt': 100
     }
-
-    success, error=tdb_mockdata.insert_row('availabilityAggregated', wrong_availability_agg_insert)
-
+    with sqlite3.connect(f'{tdb_mockdata.name}.db', timeout=30) as conn: 
+        success, error=tdb_mockdata.insert_row(conn, 'availabilityAggregated', wrong_availability_agg_insert)
+    conn.close()
     assert error.sqlite_errorcode == 787, 'sqlite does not return 787 error when inserting non existing evseId'
 
 def test_foreign_keys_on_availabilityLog(tdb_mockdata):
@@ -104,8 +107,9 @@ def test_foreign_keys_on_availabilityLog(tdb_mockdata):
         'status': 'Available',
         'timestamp': 100
     }
-    success, error=tdb_mockdata.insert_row('availabilityLog', availability_log_insert)
-
+    with sqlite3.connect(f'{tdb_mockdata.name}.db', timeout=30) as conn: 
+        success, error=tdb_mockdata.insert_row(conn,'availabilityLog', availability_log_insert)
+    conn.close()
     assert success, 'Could not insert correct data into AvailabilityLog'
 
     ## insert create_availabilityLog_table with wrong parameters
@@ -116,22 +120,12 @@ def test_foreign_keys_on_availabilityLog(tdb_mockdata):
         # missing connectorId and status
         'timestamp': 100
     }
-    success, error=tdb_mockdata.insert_row('availabilityLog', wrong_availability_log_insert)
-
+    with sqlite3.connect(f'{tdb_mockdata.name}.db', timeout=30) as conn: 
+        success, error=tdb_mockdata.insert_row(conn, 'availabilityLog', wrong_availability_log_insert)
+    conn.close()
     assert error.sqlite_errorcode == 787, 'sqlite does not return 787 error when inserting non existing evseId'
 
 def test_foreign_keys_on_connectorGroup(tdb_mockdata):
-    ## insert with right parameters
-    right_connectorGroup_insert = {
-        'locationId': 'ABC',
-        'revision': 1,
-        'connectorGroup': 1,
-        'plugType': 'Type 2',
-        'speed': 'Standard',
-        'Count': 1,
-    }
-    success, error=tdb_mockdata.insert_row('connectorGroups', right_connectorGroup_insert)
-    
     ## insert with wrong parameters
     wrong_connectorGroup_insert = {
         'locationId': 'ABC',
@@ -142,65 +136,65 @@ def test_foreign_keys_on_connectorGroup(tdb_mockdata):
         'Count': 1,
     }
 
-    success, error=tdb_mockdata.insert_row('connectorGroups', wrong_connectorGroup_insert)
-
+    with sqlite3.connect(f'{tdb_mockdata.name}.db', timeout=30) as conn: 
+        success, error=tdb_mockdata.insert_row(conn, 'connectorGroups', wrong_connectorGroup_insert)
+    conn.close()
     assert error.sqlite_errorcode == 787, 'sqlite does not return 787 error when inserting non existing revision'
 
 def test_insert_availabilityLog(tdb_sampledata):
     with open('tests/data/availability_test.json', 'r', encoding='utf-8') as f:
         availability = json.load(f)
 
-    for k in availability.keys():
-        v = availability[k]
-        tdb_sampledata.insert_row_in_availabilityLog_table(loc_avail_query=v)
+    with sqlite3.connect(f'{tdb_sampledata.name}.db', timeout=30) as conn: 
+        for k in availability.keys():
+            v = availability[k]
+            tdb_sampledata.insert_row_in_availabilityLog_table(conn, loc_avail_query=v)
+    conn.close()
 
-    conn = sqlite3.connect(f'{tdb_sampledata.name}.db')
-    cursor = conn.cursor()    
-    cursor.execute(f"SELECT COUNT(*) FROM availabilityLog")
-    count_availabilityLog = cursor.fetchone()[0]
-    assert count_availabilityLog == 30, f'there should be 30 entries, but db have {count_availabilityLog}'
+    with sqlite3.connect(f'{tdb_sampledata.name}.db', timeout=30) as conn: 
+        cursor = conn.cursor()    
+        cursor.execute(f"SELECT COUNT(*) FROM availabilityLog")
+        count_availabilityLog = cursor.fetchone()[0]
+        assert count_availabilityLog == 30, f'there should be 30 entries, but db have {count_availabilityLog}'
 
-    cursor.execute(f"SELECT COUNT(*) FROM evseIds")
-    count_evseIds = cursor.fetchone()[0]
-    assert count_evseIds == 30, f'there should be 30 entries, but db have {count_evseIds}'
-
+        cursor.execute(f"SELECT COUNT(*) FROM evseIds")
+        count_evseIds = cursor.fetchone()[0]
+        assert count_evseIds == 30, f'there should be 30 entries, but db have {count_evseIds}'
     conn.close()
 
 def test_insert_connectorGroups(tdb_sampledata):
-        conn = sqlite3.connect(f'{tdb_sampledata.name}.db')
+    with sqlite3.connect(f'{tdb_sampledata.name}.db', timeout=30) as conn: 
         cursor = conn.cursor()    
         cursor.execute(f"SELECT COUNT(*) FROM ConnectorGroups")
         count = cursor.fetchone()[0]
         assert count == 3145, f'Inserted rows do not match, entries in JSON test file. is {count} but should be 3145'
+    conn.close()
 
-        conn.close()
-        
 def test_insert_locations(tdb_sampledata):
-    conn = sqlite3.connect(f'{tdb_sampledata.name}.db')
-    cursor = conn.cursor()    
-    cursor.execute(f"SELECT COUNT(*) FROM locations")
-    count = cursor.fetchone()[0]
-    assert count == 2960, f'Inserted rows do not match, entries in JSON test file. is {count} but should be 2960'
-
-    cursor.close()
+    with sqlite3.connect(f'{tdb_sampledata.name}.db', timeout=30) as conn: 
+        cursor = conn.cursor()    
+        cursor.execute(f"SELECT COUNT(*) FROM locations")
+        count = cursor.fetchone()[0]
+        assert count == 2960, f'Inserted rows do not match, entries in JSON test file. is {count} but should be 2960'
     conn.close()
 
 def test_insert_priceTimeSlots(tdb_sampledata):
     with open('tests/data/pricing_test.json', 'r', encoding='utf-8') as f:
         pricing = json.load(f)
 
-        # inserting data twice to see check if PriceGroups are functioning properly
+    # inserting data twice to see check if PriceGroups are functioning properly
+    with sqlite3.connect(f'{tdb_sampledata.name}.db', timeout=30) as conn: 
         for locationId in pricing.keys():
             plug_data = pricing[locationId]
-            tdb_sampledata.insert_rows_in_priceTimeSlots_table(plug_data=plug_data)
+            tdb_sampledata.insert_rows_in_priceTimeSlots_table(conn, plug_data=plug_data)
         
         for locationId in pricing.keys():
             plug_data = pricing[locationId]
-            tdb_sampledata.insert_rows_in_priceTimeSlots_table(plug_data=plug_data)
-
-        conn = sqlite3.connect(f'{tdb_sampledata.name}.db')
-        cursor = conn.cursor()    
-
+            tdb_sampledata.insert_rows_in_priceTimeSlots_table(conn, plug_data=plug_data)
+    conn.close()
+        
+    with sqlite3.connect(f'{tdb_sampledata.name}.db', timeout=30) as conn: 
+        cursor=conn.cursor()
         cursor.execute(f"SELECT COUNT(*) FROM priceGroups")
         count = cursor.fetchone()[0]
         assert count == 2, f'row Count in priceGroups should be 2, but is {count}'
@@ -216,9 +210,7 @@ def test_insert_priceTimeSlots(tdb_sampledata):
         cursor.execute(f"SELECT COUNT(*) FROM priceTimeSlots")
         count = cursor.fetchone()[0]
         assert count == 52, f'row Count in priceTimeSlots should be 52, but is {count}'
-
-        cursor.close()
-        conn.close()
+    conn.close()
 
 def test_select_locationId_by_speed(tdb_sampledata):
     # ['Standard', 'Fast', 'Rapid', 'Unknown']
@@ -234,12 +226,9 @@ def test_select_locationId_by_speed(tdb_sampledata):
 
     tcount=scount + fcount + rcount + ucount 
 
-    conn = sqlite3.connect(f'{tdb_sampledata.name}.db')
-    cursor = conn.cursor()    
-    cursor.execute(f"SELECT COUNT(*) FROM (SELECT DISTINCT locationId, speed FROM latest_connector_groups);")
-    ncount = cursor.fetchone()[0]
-    assert tcount  ==  ncount, f'number of unique (location, connectorGroup) pairs should be 3145, but found {tcount}'
-
-    cursor.close()
+    with sqlite3.connect(f'{tdb_sampledata.name}.db', timeout=30) as conn: 
+        cursor = conn.cursor()    
+        cursor.execute(f"SELECT COUNT(*) FROM (SELECT DISTINCT locationId, speed FROM latest_connector_groups);")
+        ncount = cursor.fetchone()[0]
+        assert tcount  ==  ncount, f'number of unique (location, connectorGroup) pairs should be 3145, but found {tcount}'
     conn.close()
-

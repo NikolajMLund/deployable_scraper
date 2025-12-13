@@ -142,8 +142,6 @@ class TestScraperSchedule:
         mock_loc_scraper.run.assert_called_once()
         mock_avail_scraper.run.assert_called_once()
         
-
-    
     def test_scraper_scheduled(self, env_fast_scheduled, mock_avail_scraper, mock_loc_scraper):
         """Test fast scraper in scheduled mode - mocked run() methods"""
         assert os.environ['SCRAPER_TYPE'] == 'fast'
