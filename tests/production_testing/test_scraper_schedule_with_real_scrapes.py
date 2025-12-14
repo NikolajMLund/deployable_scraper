@@ -6,23 +6,7 @@ from unittest.mock import patch, MagicMock
 import time
 
             
-class TestScraperSchedule:
-    
-    # @pytest.fixture(autouse=True)
-    # def clean_imports(self):
-    #     """Clean up imported modules before each test to avoid caching issues"""
-    #     import sys
-    #     # Remove cached imports that might interfere with mocking
-    #     modules_to_clean = [
-    #         'main_scripts.run_scraper_schedule',
-    #         'scrapers.with_requests.scrape_availability_with_api',
-    #         'scrapers.with_requests.scrape_locations_with_api',
-    #     ]
-    #     for module in modules_to_clean:
-    #         if module in sys.modules:
-    #             del sys.modules[module]
-    #     yield
-    
+class TestScraperSchedule:    
     @pytest.fixture
     def env_fast_once(self, monkeypatch):
         """Setup environment for fast scraper in once mode"""
