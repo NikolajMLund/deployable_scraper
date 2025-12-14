@@ -1,16 +1,14 @@
+import os
+import sqlite3
+from datetime import datetime, timedelta
+from apscheduler.schedulers.blocking import BlockingScheduler
+from apscheduler.triggers.interval import IntervalTrigger
 from scrapers.with_requests.scrape_availability_with_api import scraper as avail_scraper
 from scrapers.with_requests.scrape_locations_with_api import scraper as loc_scraper 
 from scrapers.with_requests.scrape_prices_with_api import scraper as price_scraper
 from db_tools import db
 from logging_config import setup_logging
-
-from apscheduler.schedulers.blocking import BlockingScheduler
-from apscheduler.triggers.interval import IntervalTrigger
-
-import os
-import time
 import logging
-from datetime import datetime, timedelta
 
 # Get logger for this module
 logger = logging.getLogger(__name__)
@@ -50,12 +48,16 @@ def run_avail(speed:str, max_workers:int, sleep_in_seconds:float, db_pathname:st
     # adding counter to track number of succesfully inserted rows.
     ntotalsuccess = 0
     ntotalplugs = 0 
-    for locationId in availability.keys():
-        v = availability[locationId]['data']
-        nlocsuccess, nplugs=database.insert_row_in_availabilityLog_table(loc_avail_query=v)
-        ntotalsuccess += nlocsuccess
-        ntotalplugs += nplugs
-    
+    with sqlite3.connect(f'{database.name}.db', timeout=30) as conn:
+        for locationId in availability.keys():
+            v = availability[locationId]['data']
+            nlocsuccess, nplugs=database.insert_row_in_availabilityLog_table(
+                conn=conn,
+                loc_avail_query=v
+            )
+            ntotalsuccess += nlocsuccess
+            ntotalplugs += nplugs
+    conn.close()
     logger.info(f"Availability db-insertion completed for speed: {speed}, Inserted {ntotalsuccess} rows. Found ids for {ntotalplugs} plugs.")
 
 
@@ -83,24 +85,30 @@ def run_locations(db_pathname:str='./data/db/charging'):
     database.create_db()
 
     nmissing_ConnectorCounts = 0
-    for locationId in locations.keys():
-        v = locations[locationId]
-        # insert into locations table
-        database.insert_row_in_locations_table(v)
-
-        # insert into connectorGroup table
-        try: 
-            connector_dict = v['connectorCounts']
-        except KeyError:
-            connector_dict = v['plugTypes']
-            nmissing_ConnectorCounts += 1
-
-        for connectorGroup, connectorCount in enumerate(connector_dict):  
-            database.insert_row_in_connectorGroup_table(
-                location=v, 
-                connectorGroup=connectorGroup, 
-                connectorCount=connectorCount,
+    with sqlite3.connect(f'{database.name}.db', timeout=30) as conn:
+        for locationId in locations.keys():
+            v = locations[locationId]
+            # insert into locations table
+            database.insert_row_in_locations_table(
+                conn=conn,
+                location=v
             )
+
+            # insert into connectorGroup table
+            try: 
+                connector_dict = v['connectorCounts']
+            except KeyError:
+                connector_dict = v['plugTypes']
+                nmissing_ConnectorCounts += 1
+
+            for connectorGroup, connectorCount in enumerate(connector_dict):  
+                database.insert_row_in_connectorGroup_table(
+                    conn=conn,
+                    location=v, 
+                    connectorGroup=connectorGroup, 
+                    connectorCount=connectorCount,
+                )
+    conn.close()
 
     logger.warning(f'For {nmissing_ConnectorCounts} locations "connectorCounts" did not exist. Used "plugTypes" instead.')
     logger.info("Locations scrape completed")
@@ -138,17 +146,20 @@ def run_prices(max_workers:int, sleep_in_seconds:float, db_pathname:str='./data/
     # insert into database
     ntotalsuccess = 0
     ntotaltotal = 0 
-    for locationId in price_data.keys():
-        plug_data = price_data[locationId]
-        nsuccess, ntotal=database.insert_rows_in_priceTimeSlots_table(plug_data=plug_data)
-        ntotalsuccess += nsuccess
-        ntotaltotal += ntotal
+    with sqlite3.connect(f'{database.name}.db', timeout=30) as conn:
+        for locationId in price_data.keys():
+            plug_data = price_data[locationId]
+            nsuccess, ntotal=database.insert_rows_in_priceTimeSlots_table(
+                conn=conn,
+                plug_data=plug_data)
+            ntotalsuccess += nsuccess
+            ntotaltotal += ntotal
+    conn.close()
     
     nfailures = ntotaltotal - ntotalsuccess
     logger.info(f"Prices db-insertion completed. Inserted {ntotalsuccess} rows")
     if nfailures > 0: 
         logger.warning(f'price scraper had a total of {nfailures} failures when trying to insert data.')
-    
 
 def run_scraper_schedule(scheduler_class=BlockingScheduler):
     # Initialize logging FIRST, before any other code runs
@@ -297,4 +308,14 @@ def run_scraper_schedule(scheduler_class=BlockingScheduler):
 
 
 if __name__ == "__main__":
-    run_scraper_schedule(scheduler_class=BlockingScheduler)
+    #run_scraper_schedule(scheduler_class=BlockingScheduler)
+    run_locations(
+        db_pathname='test'
+    )
+    
+    run_avail(
+        speed='Standard', 
+        max_workers=1, 
+        sleep_in_seconds=0.1, 
+        db_pathname='test'
+    )
