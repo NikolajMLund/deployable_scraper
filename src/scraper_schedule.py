@@ -130,7 +130,7 @@ def run_prices(max_workers:int, sleep_in_seconds:float, db_pathname:str='./data/
     logger.info(f"Found {len(locids)} locations for price scraping")
 
     # setup scraper
-    options = {'timeout': 30, 'sleep_in_seconds': sleep_in_seconds}
+    options = {'timeout': (1,2), 'sleep_in_seconds': sleep_in_seconds, 'nmaxtimeouts': 3600,}
     prices_scraper = price_scraper(
         keyword='prices',
         identifiers=locids,
@@ -260,7 +260,7 @@ def run_scraper_schedule(scheduler_class=BlockingScheduler):
             name = f'Prices Scraper',
             max_instances = 2,  # Prevents overlaps
             coalesce=True,
-            next_run_time=datetime.now() + timedelta(seconds=10) # Runs at once when initialized
+            next_run_time=datetime.now() + timedelta(seconds=1) # Runs at once when initialized
         )
 
         logger.info("Schedule initialized. Starting scheduled execution loop")
