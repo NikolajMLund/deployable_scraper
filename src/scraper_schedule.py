@@ -258,9 +258,9 @@ def run_scraper_schedule(scheduler_class=BlockingScheduler):
             trigger = IntervalTrigger(minutes=minute_interval),  # Fixed intervals!
             id = 'Prices_scraper',
             name = f'Prices Scraper',
-            max_instances = 1,  # Prevents overlaps
+            max_instances = 2,  # Prevents overlaps
             coalesce=True,
-            next_run_time=datetime.now() + timedelta(minutes=20) # Runs at once when initialized
+            next_run_time=datetime.now() + timedelta(seconds=10) # Runs at once when initialized
         )
 
         logger.info("Schedule initialized. Starting scheduled execution loop")

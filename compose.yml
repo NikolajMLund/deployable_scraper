@@ -71,6 +71,6 @@ services:
       - RUN_MODE=scheduled      # Scheduling mode
       - LOG_LEVEL=INFO          # how much info to log
       - SCRAPER_TYPE=prices
-      - MINUTE_INTERVAL=60
-      - SLEEP_IN_SECONDS=0.2
+      - MINUTE_INTERVAL=120
+      - SLEEP_IN_SECONDS=0.5
     restart: unless-stopped
