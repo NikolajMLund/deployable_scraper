@@ -72,5 +72,5 @@ services:
       - LOG_LEVEL=INFO          # how much info to log
       - SCRAPER_TYPE=prices
       - MINUTE_INTERVAL=60
-      - SLEEP_IN_SECONDS=0.1
+      - SLEEP_IN_SECONDS=0.2
     restart: unless-stopped

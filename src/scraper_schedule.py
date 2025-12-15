@@ -260,7 +260,7 @@ def run_scraper_schedule(scheduler_class=BlockingScheduler):
             name = f'Prices Scraper',
             max_instances = 1,  # Prevents overlaps
             coalesce=True,
-            next_run_time=datetime.now() + timedelta(seconds=1) # Runs at once when initialized
+            next_run_time=datetime.now() + timedelta(minutes=20) # Runs at once when initialized
         )
 
         logger.info("Schedule initialized. Starting scheduled execution loop")
