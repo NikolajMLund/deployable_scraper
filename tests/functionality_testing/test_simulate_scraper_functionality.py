@@ -3,7 +3,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 import time
 import json
-from main_scripts.run_scraper_schedule import run_scraper_schedule        
+from scraper_schedule import run_scraper_schedule        
 from helper_class import tdb as db
 
 ###############################################################################################################################
@@ -25,7 +25,7 @@ def tdb():
 
 @pytest.fixture
 def mock_db_with_tdb(monkeypatch, tdb): 
-    monkeypatch.setattr('main_scripts.run_scraper_schedule.db', lambda name=None, **kwargs: tdb)
+    monkeypatch.setattr('scraper_schedule.db', lambda name=None, **kwargs: tdb)
     return tdb
 
 @pytest.fixture
@@ -94,7 +94,7 @@ def env_prices_scheduled(monkeypatch):
 @pytest.fixture
 def mock_location_scraper(monkeypatch):
     """Mock the location scraper's run() method"""
-    with patch('main_scripts.run_scraper_schedule.loc_scraper') as mock_scraper_class:
+    with patch('scraper_schedule.loc_scraper') as mock_scraper_class:
         # Create a mock instance
         mock_instance = MagicMock()
         
@@ -120,7 +120,7 @@ def mock_location_scraper(monkeypatch):
 @pytest.fixture
 def mock_avail_scraper(monkeypatch):
     """Mock the availability scraper's run() method"""
-    with patch('main_scripts.run_scraper_schedule.avail_scraper') as mock_scraper_class:
+    with patch('scraper_schedule.avail_scraper') as mock_scraper_class:
         # Create a mock instance
         mock_instance = MagicMock()
         
@@ -145,7 +145,7 @@ def mock_avail_scraper(monkeypatch):
 @pytest.fixture
 def mock_price_scraper(monkeypatch):
     """Mock the prices scraper's run() method"""
-    with patch('main_scripts.run_scraper_schedule.price_scraper') as mock_scraper_class:
+    with patch('scraper_schedule.price_scraper') as mock_scraper_class:
         # Create a mock instance
         mock_instance = MagicMock()
         
@@ -267,3 +267,23 @@ def test_run_prices_scheduled(
     sch.shutdown(wait=True)
     mock_location_scraper.run.assert_called_once()
     mock_price_scraper.run.assert_called_once()
+
+# def test_run_scraper_as_main_once(
+#         env_locations_once, 
+#         mock_location_scraper,
+#         mock_avail_scraper,
+#         mock_price_scraper,
+#         tdb,
+#         mock_db_with_tdb,
+#     ):
+#     import subprocess
+#     import sys
+#     results=subprocess.run(
+#         [sys.executable, './src/main_scripts/run_scraper_schedule.py'],
+#         env=env_locations_once,
+#         capture_output=True,
+#         text=True,
+#         timeout=30
+#     )
+
+#     breakpoint()    

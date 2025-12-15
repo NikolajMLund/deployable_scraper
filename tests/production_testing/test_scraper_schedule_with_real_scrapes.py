@@ -66,7 +66,7 @@ class TestScraperSchedule:
         assert os.environ['SCRAPER_TYPE'] == 'Prices'
         assert os.environ['RUN_MODE'] == 'once'
 
-        from main_scripts.run_scraper_schedule import run_scraper_schedule        
+        from scraper_schedule import run_scraper_schedule        
         #HELP: first delete existing file on './data/db/charging_existing.db'
         # if os.path.exists(os.environ.get('DB_PATHNAME')):
         #     os.remove(os.environ.get('DB_PATHNAME'))
@@ -84,7 +84,7 @@ class TestScraperSchedule:
         assert os.environ['SCRAPER_TYPE'] == 'Prices'
         assert os.environ['RUN_MODE'] == 'once'
 
-        from main_scripts.run_scraper_schedule import run_scraper_schedule        
+        from scraper_schedule import run_scraper_schedule        
         run_scraper_schedule()
     
     # def test_scraper_scheduled(self, env_prices_scheduled,):
@@ -92,7 +92,7 @@ class TestScraperSchedule:
     #     assert os.environ['SCRAPER_TYPE'] == 'fast'
     #     assert os.environ['RUN_MODE'] == 'scheduled'
 
-    #     from main_scripts.run_scraper_schedule import run_scraper_schedule
+    #     from scraper_schedule import run_scraper_schedule
     #     from apscheduler.schedulers.background import BackgroundScheduler
         
     #     sch = run_scraper_schedule(scheduler_class=BackgroundScheduler)
