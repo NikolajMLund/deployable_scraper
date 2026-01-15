@@ -48,7 +48,7 @@ class db:
             new_mode = cursor.fetchone()[0]
             
             # Set busy timeout
-            cursor.execute('PRAGMA busy_timeout=10000')
+            cursor.execute('PRAGMA busy_timeout=120000') # wait 2 minutes. 
                         
             logger.info(f"Journal mode changed: {current_mode} → {new_mode}")
             return new_mode.lower() == 'wal'
