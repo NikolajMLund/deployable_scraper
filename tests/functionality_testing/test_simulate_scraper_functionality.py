@@ -3,13 +3,14 @@ import pytest
 from unittest.mock import patch, MagicMock
 import time
 import json
+import sqlite3
 from scraper_schedule import run_scraper_schedule        
 from helper_class import tdb as db
 
 ###############################################################################################################################
 # Fixtures: 
 ###############################################################################################################################
-@pytest.fixture(scope='session')
+@pytest.fixture
 def tdb():
     """Create and setup test database instance"""
     tdb = db(name='./test')
@@ -180,7 +181,13 @@ def test_run_locations_once(
         mock_db_with_tdb,
     ):
     run_scraper_schedule()
-    
+    with sqlite3.connect('test.db') as conn: 
+        cursor=conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM LOCATIONS;')
+        nentries=cursor.fetchone()[0]
+    conn.close()
+    assert nentries == 3153, f'Entries in Locations is {nentries}, but should be 3153.' 
+
 
 def test_run_avail_once(
         env_standard_once, 
@@ -192,6 +199,13 @@ def test_run_avail_once(
     ):
     run_scraper_schedule()
 
+    with sqlite3.connect('test.db') as conn: 
+        cursor=conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM AvailabilityLog;')
+        nentries=cursor.fetchone()[0]
+    conn.close()
+    assert nentries == 15867, f'Entries in AvailabilityLog is {nentries}, but should be 15867.' 
+
 def test_run_prices_once(
         env_prices_once, 
         mock_location_scraper,
@@ -201,6 +215,13 @@ def test_run_prices_once(
         mock_db_with_tdb,
     ):
     run_scraper_schedule()
+
+    with sqlite3.connect('test.db') as conn: 
+        cursor=conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM priceTimeSlots;')
+        nentries=cursor.fetchone()[0]
+    conn.close()
+    assert nentries == 58931, f'Entries in priceTimeSlots is {nentries}, but should be 58931.' 
 
 
 def test_run_locations_scheduled(
