@@ -203,6 +203,7 @@ def run_scraper_schedule(scheduler_class=BlockingScheduler):
             name = f'{speed} Availability Scraper',
             max_instances = 1,  # Prevents overlaps
             coalesce=True,
+            misfire_grace_time=120,
             next_run_time=datetime.now() + timedelta(seconds=1) # Runs at once when initialized
         )
 
@@ -232,6 +233,7 @@ def run_scraper_schedule(scheduler_class=BlockingScheduler):
             name = 'locations Scraper',
             max_instances = 1,  # Prevents overlaps
             coalesce=True,
+            misfire_grace_time=300,
         )
 
         logger.info("Schedule initialized. Starting scheduled execution loop")
@@ -260,6 +262,7 @@ def run_scraper_schedule(scheduler_class=BlockingScheduler):
             name = f'Prices Scraper',
             max_instances = 2,  # Prevents overlaps
             coalesce=True,
+            misfire_grace_time=300,
             next_run_time=datetime.now() + timedelta(seconds=1) # Runs at once when initialized
         )
 
