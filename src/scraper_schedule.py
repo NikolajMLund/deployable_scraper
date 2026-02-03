@@ -32,7 +32,8 @@ def run_avail(speed:str, max_workers:int, sleep_in_seconds:float, db_pathname:st
     logger.info(f"Found {len(locids)} locations for speed: {speed}")
 
     # setup scraper
-    options = {'timeout': 30, 'sleep_in_seconds': sleep_in_seconds}
+    #options = {'timeout': 30, 'sleep_in_seconds': sleep_in_seconds}
+    options = {'timeout': (10,10), 'sleep_in_seconds': sleep_in_seconds, 'nmaxtimeouts': 3600,}
     availability_scraper=avail_scraper(
         keyword='availability',
         identifiers=locids,
